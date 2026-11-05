@@ -69,6 +69,16 @@ details summary{cursor:pointer;color:var(--accent);font-size:14px;margin:8px 0}
 .combo-list div.act,.combo-list div:hover{background:var(--bg)}
 .combo-list div span{color:var(--muted);font-size:12.5px;margin-left:6px}
 .combo-list .none{color:var(--muted);cursor:default}
+.chatlog{display:flex;flex-direction:column;gap:8px;max-height:60vh;overflow-y:auto;margin:6px 0}
+.chatlog:empty{display:none}
+.msg{padding:9px 12px;border-radius:14px;max-width:92%;font-size:14.5px;line-height:1.5}
+.msg.me{align-self:flex-end;background:var(--accent);color:#fff;border-bottom-right-radius:4px;white-space:pre-wrap}
+.msg.bot{align-self:flex-start;background:var(--bg);border:1px solid var(--line);border-bottom-left-radius:4px}
+.msg.bot ul{margin:4px 0;padding-left:18px}.msg.bot h4{margin:8px 0 2px;font-size:14px}.msg.bot p{margin:4px 0}
+.sugg{display:flex;flex-wrap:wrap;gap:6px;margin:8px 0}
+.sugg button{font-size:13px;padding:6px 10px;border-radius:16px}
+.chatbar{display:flex;gap:8px;align-items:flex-end}
+.chatbar textarea{flex:1;font:inherit;font-size:15px;padding:9px 10px;border:1px solid var(--line);border-radius:10px;background:var(--bg);color:var(--ink);resize:none}
 .empty{color:var(--muted);text-align:center;padding:20px 8px}
 .big{font-size:15px}
 </style>
@@ -118,7 +128,8 @@ details summary{cursor:pointer;color:var(--accent);font-size:14px;margin:8px 0}
   </section>
 
   <nav class="tabs" id="tabs">
-    <button data-t="sim" class="on">Simulate</button>
+    <button data-t="ask" class="on">💬 Ask</button>
+    <button data-t="sim">Simulate</button>
     <button data-t="strat">Strategies</button>
     <button data-t="best">Best today</button>
     <button data-t="target">₹ Target plan</button>
@@ -126,7 +137,22 @@ details summary{cursor:pointer;color:var(--accent);font-size:14px;margin:8px 0}
   </nav>
 
   <!-- SIMULATE -->
-  <section class="tab on card" id="tab-sim">
+  <section class="tab on card" id="tab-ask">
+    <h2>Ask anything about your stocks</h2>
+    <p class="muted" style="margin-top:0">Claude answers using the loaded prices and runs the simulations for you.</p>
+    <div id="chatLog" class="chatlog"></div>
+    <div id="chatSugg" class="sugg">
+      <button>Which stock looks best today?</button>
+      <button>What could happen to TCS in the next month?</button>
+      <button>Make a plan for ₹10,000 a day with ₹10 lakh</button>
+      <button>What's the best buy/sell rule for HDFCBANK?</button>
+      <button>Is Reliance risky right now?</button>
+    </div>
+    <div class="chatbar"><textarea id="chatIn" rows="2" placeholder="Type your question… e.g. Should I buy Infosys this week?"></textarea><button class="primary" id="chatSend">Send</button></div>
+    <div id="chatNote" class="muted"></div>
+  </section>
+
+  <section class="tab card" id="tab-sim">
     <h2>Where could it go?</h2>
     <div class="row">
       <label>Stock<select class="stockSel" id="simStock"></select></label>
@@ -356,6 +382,76 @@ function makeCombo(sel){
   const c={sel,sync};combos.push(c);sync();return c}
 const syncCombos=()=>combos.forEach(c=>c.sync());
 const extraPick=new Set();
+
+/* ---------- ASK (chat) ---------- */
+const chatHist=[];let chatBusy=false,chatAbort=null;
+const findStock=q=>{if(!q)return null;const u=String(q).trim().toUpperCase().replace(/\.NS$/,"");return stocks.find(s=>s.name.toUpperCase()===u)||stocks.find(s=>s.full&&s.full.toUpperCase().includes(u))||stocks.find(s=>s.name.toUpperCase().startsWith(u))};
+const r2=v=>v==null||!isFinite(v)?null:Math.round(v*100)/100;
+const p1=v=>v==null||!isFinite(v)?null:Math.round(v*1000)/10;
+function snapshot(s){const c=s.closes||[];let pk=-Infinity,mdd=0;for(const x of c.slice(-250)){pk=Math.max(pk,x);mdd=Math.min(mdd,x/pk-1)}
+  return{symbol:s.name,company:s.full||"",price:r2(s.price),prices_as_of:s.bars?s.bars.at(-1).day:"hand-entered",typical_daily_move_pct:p1(s.sigma),annual_volatility_pct:p1(s.sigma*Math.sqrt(252)),
+   return_5d_pct:c.length>6?p1(c.at(-1)/c.at(-6)-1):null,return_20d_pct:c.length>21?p1(c.at(-1)/c.at(-22)-1):null,return_1y_pct:c.length>250?p1(c.at(-1)/c.at(-251)-1):null,
+   max_fall_from_peak_1y_pct:c.length?p1(mdd):null,rsi14:r2(s.rsi),sma20:r2(s.sma20),sma50:r2(s.sma50),trend:s.sma50?(s.price>s.sma50?"above 50-day average":"below 50-day average"):null,avg_daily_range_pct:s.atr?p1(s.atr/s.price):null,
+   year_high:c.length?r2(Math.max(...c.slice(-250))):null,year_low:c.length?r2(Math.min(...c.slice(-250))):null,last_5_closes:c.slice(-5).map(r2)}}
+function simTool(s,days,trend){days=Math.max(1,Math.min(252,Math.round(days||21)));const N=2000,P=simPaths(s,days,N,"boot",trend||"neutral",0),W=days+1;const fr=[];let dip=0;
+  for(let n=0;n<N;n++){fr.push(P[n*W+days]/s.price-1);let mn=Infinity;for(let t=1;t<W;t++)mn=Math.min(mn,P[n*W+t]);if(mn/s.price-1<=-0.1)dip++}
+  const F=sortN(fr);const pr=x=>r2(s.price*(1+x));
+  return{symbol:s.name,start_price:r2(s.price),trading_days:days,simulations:N,trend_assumption:trend||"neutral",chance_up_pct:p1(fr.filter(x=>x>0).length/N),chance_gain_10pct_or_more:p1(fr.filter(x=>x>=.1).length/N),chance_loss_10pct_or_more:p1(fr.filter(x=>x<=-.1).length/N),chance_dips_10pct_along_the_way:p1(dip/N),
+   scenarios:{bad_tail_2pct:{price:pr(q(F,.02)),change_pct:p1(q(F,.02))},bear_10pct:{price:pr(q(F,.1)),change_pct:p1(q(F,.1))},median:{price:pr(q(F,.5)),change_pct:p1(q(F,.5))},bull_90pct:{price:pr(q(F,.9)),change_pct:p1(q(F,.9))},great_98pct:{price:pr(q(F,.98)),change_pct:p1(q(F,.98))}}}}
+function btTool(s,costPct){const cost=(costPct??0.1)/100,c=s.closes.slice(-750);const res=STRATS.map(st=>({st,r:backtest(c,positions(c,st.k),cost,50)}));
+  const rob=STRATS.map(()=>[]);for(let m=0;m<150;m++){const sc=synthCloses(s.rets,302,c.at(-1));STRATS.forEach((st,j)=>rob[j].push(backtest(sc,positions(sc,st.k),cost,50).total))}
+  return{symbol:s.name,history_days:c.length-51,rules:res.map((x,i)=>{const F=sortN(rob[i]);return{rule:x.st.n,how:x.st.d,total_return_pct:p1(x.r.total),per_year_pct:p1(x.r.cagr),worst_fall_pct:p1(x.r.mdd),trades:x.r.trades,win_rate_pct:p1(x.r.win),sharpe:r2(x.r.sharpe),signal_today:x.r.now,
+    simulated_future_median_return_pct:p1(q(F,.5)),simulated_chance_of_loss_pct:p1(rob[i].filter(v=>v<0).length/rob[i].length)}})}}
+function rankTool(n){const r=rankStocks();renderPick();return{count:r.length,top:r.slice(0,Math.max(1,Math.min(20,n||5))).map((x,i)=>({rank:i+1,symbol:x.s.name,company:x.s.full||"",score:r2(x.score),reasons:x.why,price:r2(x.entry),stop_loss:r2(x.stop),target:r2(x.tgt),chance_target_first_10d_pct:p1(x.pW),chance_stop_first_10d_pct:p1(x.pL),expected_value_per_trade_pct:r2(x.ev*100)})),
+  note:"Entry at last close, stop 1.5 average daily ranges below, target 2 above. With no edge, target-first is about 43%."}}
+function planTool(a){const S=(a.symbols&&a.symbols.length?a.symbols.map(findStock):rankStocks().slice(0,3).map(x=>x.s)).filter(s=>s&&s.rets);if(!S.length)return{error:"No usable stocks with history."};
+  const cap=+a.capital||1e6,T=+a.daily_target||1e4,intra=(a.style||"intraday")!=="hold",cost=(a.cost_pct??(intra?0.1:0))/100;
+  const ser=S.map(s=>{const use=intra&&s.hasOHLC;const r=use?s.oc:s.rets,m=mean(r);return{r:r.map(x=>x-m),sd:std(r)}});
+  let w=capW(ser.map(x=>1/x.sd).map((v,_,A)=>v/A.reduce((p,q)=>p+q,0)),Math.max(1/S.length,0.4));const amt=w.map(x=>x*cap);
+  const day=()=>{let p=0;ser.forEach((x,i)=>p+=amt[i]*(Math.exp(x.r[(RNG()*x.r.length)|0])-1));return p-cap*cost};
+  const K=10000,pn=[];for(let k=0;k<K;k++)pn.push(day());const F=sortN(pn);let yr=0,dd=0;
+  for(let y=0;y<200;y++){let c=0,pk=0,hit=false;for(let d=0;d<250;d++){c+=day();pk=Math.max(pk,c);if(c-pk<=-0.2*cap)hit=true}if(c>=250*T)yr++;if(hit)dd++}
+  return{capital:cap,daily_target:T,required_daily_return_pct:r2(T/cap*100),style:intra?"intraday open-to-close":"hold close-to-close",cost_per_day_pct:r2(cost*100),trend:"removed (conservative)",
+   allocation:S.map((s,i)=>({symbol:s.name,share_pct:p1(w[i]),amount:Math.round(amt[i]),shares:Math.floor(amt[i]/s.price),price:r2(s.price),typical_daily_swing_rupees:Math.round(amt[i]*ser[i].sd)})),
+   chance_day_hits_target_pct:p1(pn.filter(x=>x>=T).length/K),chance_losing_day_pct:p1(pn.filter(x=>x<0).length/K),average_day:Math.round(mean(pn)),bad_day_1_in_20:Math.round(q(F,.05)),good_day_1_in_20:Math.round(q(F,.95)),
+   chance_year_total_reaches_250x_target_pct:p1(yr/200),chance_of_20pct_capital_drawdown_in_year_pct:p1(dd/200)}}
+const TOOLS=[
+ {name:"find_stocks",description:"Search the loaded NSE stocks by symbol or company name. Use when the user names a company loosely.",inputSchema:{type:"object",properties:{query:{type:"string"}},required:["query"]},
+  execute:({query})=>{const qv=String(query||"").toLowerCase();return stocks.filter(s=>s.name.toLowerCase().includes(qv)||(s.full||"").toLowerCase().includes(qv)).slice(0,10).map(s=>({symbol:s.name,company:s.full||"",price:r2(s.price)}))}},
+ {name:"stock_snapshot",description:"Current facts for one stock from its price history: price, date, returns, volatility, RSI, moving averages, 1-year high/low and drawdown.",inputSchema:{type:"object",properties:{symbol:{type:"string"}},required:["symbol"]},
+  execute:({symbol})=>{const s=findStock(symbol);if(!s)throw new Error("Unknown stock "+symbol+". Try find_stocks.");return snapshot(s)}},
+ {name:"simulate_future",description:"Monte Carlo: 2,000 possible futures by replaying the stock's real past daily moves. Returns probabilities and bull/base/bear prices. days = trading days (5=week, 21=month, 63=3 months, 252=year).",inputSchema:{type:"object",properties:{symbol:{type:"string"},days:{type:"integer"},trend:{type:"string",enum:["neutral","hist"],description:"neutral = no trend (default, safer); hist = assume past trend continues"}},required:["symbol"]},
+  execute:({symbol,days,trend})=>{const s=findStock(symbol);if(!s)throw new Error("Unknown stock "+symbol);return simTool(s,days,trend)}},
+ {name:"rank_stocks",description:"Rank all loaded stocks for 'which is best today' using trend, risk-adjusted momentum and RSI, with a simulated trade plan (entry/stop/target) for each.",inputSchema:{type:"object",properties:{top:{type:"integer"}}},execute:({top})=>rankTool(top)},
+ {name:"backtest_rules",description:"Test 4 buy/sell rules (buy & hold, 20/50 moving-average trend, RSI dip buying, 20-day breakout) on the stock's history and on simulated futures; includes today's signal for each rule.",inputSchema:{type:"object",properties:{symbol:{type:"string"},cost_pct:{type:"number"}},required:["symbol"]},
+  execute:({symbol,cost_pct})=>{const s=findStock(symbol);if(!s||!s.closes||s.closes.length<80)throw new Error("Need a stock with at least 80 days of history");return btTool(s,cost_pct)}},
+ {name:"plan_daily_target",description:"Allocate capital across stocks to aim for a daily rupee profit target and simulate how often it is hit. If symbols omitted, uses today's top 3 ranked.",inputSchema:{type:"object",properties:{capital:{type:"number"},daily_target:{type:"number"},symbols:{type:"array",items:{type:"string"}},style:{type:"string",enum:["intraday","hold"]},cost_pct:{type:"number"}},required:["capital","daily_target"]},
+  execute:a=>planTool(a)}];
+const TOOL_MSG={find_stocks:"Searching stocks",stock_snapshot:"Reading price history",simulate_future:"Running 2,000 simulations",rank_stocks:"Ranking all stocks",backtest_rules:"Backtesting buy/sell rules",plan_daily_target:"Simulating your plan"};
+function chatSystem(){const m=(typeof AUTO!=="undefined"&&AUTO&&AUTO.meta)||{};
+  return `You are the assistant inside "Stock Scenario Lab", a stock simulator for an Indian retail investor (NSE, rupees). Today is ${new Date().toLocaleDateString("en-IN",{dateStyle:"long"})}. Loaded: ${stocks.length} stocks${m.asof?`, daily prices up to ${m.asof}`:""}.
+Rules:
+- Use the tools for every number about a stock. Never invent prices or statistics. If the stock isn't loaded, say so and suggest uploading its NSE CSV.
+- You only know price history, not news, results or fundamentals beyond general knowledge (which may be out of date; say so if you use it).
+- Be honest: nothing can predict prices or a perfect buy/sell time, and daily profit targets are often unrealistic. Explain odds and risk in plain words, and suggest a stop-loss and position size.
+- This is education, not personal financial advice. Mention that briefly only when you recommend an action.
+- The user reads on a phone: answer in short paragraphs or a few bullets, with **bold** key numbers, under 200 words unless asked for detail. Use ₹ and Indian number formats (lakh, crore).`}
+function chatRender(){const box=$("#chatLog");$("#chatSugg").style.display=chatHist.length?"none":"";box.innerHTML=chatHist.map(m=>m.role==="user"?`<div class="msg me">${esc(m.content)}</div>`:`<div class="msg bot">${md(m.content)}</div>`).join("")+(chatBusy?`<div class="msg bot" id="chatLive"><span class="muted">Thinking…</span></div>`:"");box.scrollTop=box.scrollHeight}
+async function chatSend(text){text=(text||"").trim();if(!text||chatBusy)return;
+  if(!sampler){$("#chatNote").innerHTML="Chat needs this page to be opened inside the Claude app or claude.ai, with permission to ask Claude.";return}
+  chatHist.push({role:"user",content:text});chatBusy=true;$("#chatIn").value="";$("#chatSend").disabled=true;chatRender();
+  const live=()=>document.getElementById("chatLive");
+  const msgs=chatHist.slice(-12).map((m,i,a)=>({role:m.role,content:i===0?chatSystem()+"\n\nUser question:\n"+m.content:m.content}));
+  if(msgs[0].role!=="user")msgs.shift();
+  const tools=TOOLS.map(t=>({...t,execute:async inp=>{const el=live();if(el)el.innerHTML=`<span class="muted">${TOOL_MSG[t.name]||"Working"}${inp&&inp.symbol?" for "+esc(inp.symbol):""}…</span>`;await new Promise(r=>setTimeout(r,30));return t.execute(inp||{})}}));
+  chatAbort=new AbortController();
+  try{const r=await sampler(msgs,{tools,signal:chatAbort.signal,cache:false,modelTier:"default",onText:({text})=>{const el=live();if(el&&text)el.innerHTML=md(text)}});
+    chatHist.push({role:"assistant",content:r.text||"(no answer)"})}
+  catch(e){chatHist.push({role:"assistant",content:e&&e.code==="not_granted"?"I need your permission to answer. Tap Send again and allow it.":e&&e.code==="rate_limited"?"Too many questions in a short time. Please wait a minute and try again.":(e&&e.text)||"Sorry, I couldn't answer that just now. Please try again."})}
+  chatBusy=false;$("#chatSend").disabled=false;chatRender()}
+$("#chatSend").onclick=()=>chatSend($("#chatIn").value);
+$("#chatIn").addEventListener("keydown",e=>{if(e.key==="Enter"&&!e.shiftKey){e.preventDefault();chatSend($("#chatIn").value)}});
+$("#chatSugg").addEventListener("click",e=>{const b=e.target.closest("button");if(b)chatSend(b.textContent)});
 
 /* ---------- tabs ---------- */
 $("#tabs").addEventListener("click",e=>{const t=e.target.dataset.t;if(!t)return;document.querySelectorAll("#tabs button").forEach(b=>b.classList.toggle("on",b.dataset.t===t));document.querySelectorAll(".tab").forEach(x=>x.classList.toggle("on",x.id==="tab-"+t))});
