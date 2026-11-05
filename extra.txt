@@ -1,0 +1,3 @@
+# Add any extra NSE symbols you want (one per line), e.g.
+# IRCTC
+# ZENTEC

@@ -1,0 +1,28 @@
+name: Fetch NSE prices
+on:
+  schedule:
+    - cron: "0 11 * * 1-5"   # 4:30 PM IST, Mon-Fri, after market close
+  workflow_dispatch:
+permissions:
+  contents: write
+jobs:
+  fetch:
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+      - run: pip install --quiet yfinance pandas requests
+      - run: python fetch.py
+      - run: python build.py
+      - name: Publish to the data branch (one commit, history not kept)
+        run: |
+          git config user.name "price-bot"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git checkout --orphan data-tmp
+          git rm -r --cached --quiet .
+          git add -f data/market.json site/index.html
+          git commit --quiet -m "Prices as of $(python -c 'import json;print(json.load(open("data/market.json"))["meta"]["asof"])')"
+          git push --force origin data-tmp:data

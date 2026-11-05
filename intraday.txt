@@ -1,0 +1,11 @@
+# Stocks that also get 5-minute candles (last 60 days) for the Intraday timing tab.
+RELIANCE
+HDFCBANK
+ICICIBANK
+INFY
+TCS
+SBIN
+BHARTIARTL
+ITC
+LT
+AXISBANK

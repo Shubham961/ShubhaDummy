@@ -1,0 +1,621 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Stock Scenario Lab</title>
+<style>
+:root{
+  --bg:#f6f6f4; --card:#fcfcfb; --ink:#0b0b0b; --ink2:#52514e; --muted:#7a7974; --line:#e4e3de;
+  --accent:#2a78d6; --s2:#eb6834; --s3:#1baf7a; --s4:#eda100;
+  --up:#14955f; --down:#d63b3a; --warnbg:#fff6e0; --warnink:#6b4a00; --band1:rgba(42,120,214,.14); --band2:rgba(42,120,214,.30); --path:rgba(82,81,78,.22);
+}
+@media (prefers-color-scheme: dark){
+  :root{ --bg:#121211; --card:#1a1a19; --ink:#f0efec; --ink2:#c3c2b7; --muted:#8f8e88; --line:#2e2e2b;
+  --accent:#3987e5; --s2:#d95926; --s3:#199e70; --s4:#c98500;
+  --up:#2fb67a; --down:#e66767; --warnbg:#2b2312; --warnink:#f1d28a; --band1:rgba(57,135,229,.16); --band2:rgba(57,135,229,.34); --path:rgba(195,194,183,.18);}
+}
+*{box-sizing:border-box}
+body{margin:0;background:var(--bg);color:var(--ink);font:15px/1.5 -apple-system,BlinkMacSystemFont,"Segoe UI",Roboto,sans-serif}
+.wrap{max-width:980px;margin:0 auto;padding:16px 14px 60px}
+h1{font-size:22px;margin:4px 0 2px}
+h2{font-size:17px;margin:0 0 8px}
+h3{font-size:15px;margin:14px 0 6px}
+.sub{color:var(--ink2);margin:0 0 12px}
+.card{background:var(--card);border:1px solid var(--line);border-radius:12px;padding:14px;margin:12px 0}
+.warn{background:var(--warnbg);color:var(--warnink);border-radius:10px;padding:10px 12px;font-size:13.5px}
+.muted{color:var(--muted);font-size:13px}
+button,.btn{appearance:none;border:1px solid var(--line);background:var(--card);color:var(--ink);border-radius:9px;padding:8px 12px;font:inherit;font-size:14px;cursor:pointer;display:inline-block}
+button.primary{background:var(--accent);border-color:var(--accent);color:#fff;font-weight:600}
+button:disabled{opacity:.5;cursor:default}
+.btn input{display:none}
+.row{display:flex;flex-wrap:wrap;gap:10px;align-items:flex-end}
+.row>label{display:flex;flex-direction:column;font-size:12.5px;color:var(--ink2);gap:3px;min-width:120px;flex:1}
+input[type=number],input[type=text],select{font:inherit;font-size:15px;padding:7px 8px;border:1px solid var(--line);border-radius:8px;background:var(--bg);color:var(--ink);width:100%}
+.tabs{position:sticky;top:0;z-index:5;background:var(--bg);display:flex;gap:6px;overflow-x:auto;padding:8px 0;scrollbar-width:none}
+.tabs button{white-space:nowrap;border-radius:20px}
+.tabs button.on{background:var(--ink);color:var(--bg);border-color:var(--ink)}
+.tab{display:none}.tab.on{display:block}
+.tiles{display:grid;grid-template-columns:repeat(auto-fill,minmax(140px,1fr));gap:8px;margin:10px 0}
+.tile{border:1px solid var(--line);border-radius:10px;padding:9px 10px}
+.tile .k{font-size:12px;color:var(--ink2)}.tile .v{font-size:19px;font-weight:650;font-variant-numeric:tabular-nums}
+.tile .d{font-size:11.5px;color:var(--muted)}
+.up{color:var(--up)}.down{color:var(--down)}
+.chartbox{position:relative;height:280px;margin:8px 0}
+.chartbox.sm{height:200px}
+table{width:100%;border-collapse:collapse;font-size:13.5px;font-variant-numeric:tabular-nums}
+th,td{text-align:left;padding:7px 6px;border-bottom:1px solid var(--line);vertical-align:top}
+th{font-size:12px;color:var(--ink2);font-weight:600}
+.tscroll{overflow-x:auto}
+.scen{display:grid;grid-template-columns:repeat(auto-fill,minmax(200px,1fr));gap:8px}
+.scen .tile{border-left-width:4px}
+.chip{display:inline-block;font-size:12px;padding:2px 8px;border-radius:12px;border:1px solid var(--line);margin:2px 4px 2px 0}
+.chip.buy{border-color:var(--up);color:var(--up)}.chip.sell{border-color:var(--down);color:var(--down)}
+.stock{display:flex;justify-content:space-between;align-items:center;border-bottom:1px solid var(--line);padding:7px 0;gap:8px}
+.stock:last-child{border-bottom:none}
+.x{border:none;background:none;color:var(--muted);font-size:18px;padding:0 6px}
+.ai{border:1px dashed var(--line);border-radius:10px;padding:10px 12px;margin-top:10px;font-size:14px}
+.ai h4{margin:10px 0 4px;font-size:14px}.ai ul{margin:4px 0;padding-left:20px}
+.legend{display:flex;flex-wrap:wrap;gap:12px;font-size:12.5px;color:var(--ink2)}
+.legend i{display:inline-block;width:12px;height:3px;border-radius:2px;vertical-align:middle;margin-right:5px}
+details summary{cursor:pointer;color:var(--accent);font-size:14px;margin:8px 0}
+.empty{color:var(--muted);text-align:center;padding:20px 8px}
+.big{font-size:15px}
+</style>
+</head>
+<body>
+<div class="wrap">
+  <h1>Stock Scenario Lab</h1>
+  <p class="sub">Run thousands of possible futures before you put money in.</p>
+  <div class="warn"><b>Read this first:</b> every number here comes from how the stock moved in the past. It can't see tomorrow's news, results or market crashes, and nothing can promise a profit. Use it to understand the <i>range</i> of what can happen and size your risk. It isn't financial advice.</div>
+
+  <section class="card">
+    <h2>1 · Your stocks</h2>
+    <p class="muted">Upload daily price history as CSV, for example from <b>NSE</b> (nseindia.com → stock → Historical data → Download) or <b>Yahoo Finance</b> (stock → Historical data → Download). 2 years of daily data works best. Intraday CSVs (5- or 15-minute candles from your broker) go to the <b>Intraday timing</b> tab automatically.</p>
+    <div id="autoBox"></div>
+    <details id="manualBox" open><summary id="manualSum" style="display:none">Add a stock that isn't in the list</summary>
+    <div class="nse">
+      <h3 style="margin-top:4px">Get real NSE data</h3>
+      <div class="row">
+        <label style="flex:3">NSE symbols (comma separated)<input type="text" id="nseSyms" value="RELIANCE, TCS, HDFCBANK, INFY, ICICIBANK" autocapitalize="characters"></label>
+        <button id="nseGo" style="flex:0">Make links</button>
+      </div>
+      <div id="nseLinks" style="margin:8px 0"></div>
+      <ol class="muted" style="padding-left:20px;margin:4px 0">
+        <li>Tap a stock below to open its NSE page.</li>
+        <li>Scroll to <b>Historical Data</b>, choose <b>1Y</b>, then tap <b>Download (.csv)</b>.</li>
+        <li>Come back here, tap <b>Upload CSV files</b> and pick all the downloaded files at once.</li>
+      </ol>
+      <p class="muted">Want 2 years? Download two 1-year ranges for the same stock and upload both. They're merged automatically. NSE's site works best in a phone browser in desktop mode, or on a computer.</p>
+    </div>
+    <div class="row" style="align-items:center;margin-top:10px">
+      <label class="btn primary" style="background:var(--accent);color:#fff;border-color:var(--accent);flex:0;min-width:auto">Upload CSV files<input type="file" id="file" multiple accept=".csv,text/csv,text/plain"></label>
+      <button id="demoBtn" style="flex:0">Load demo stocks</button>
+    </div>
+    <details><summary>Or add a stock by hand (no history needed)</summary>
+      <div class="row">
+        <label>Name<input type="text" id="mName" placeholder="e.g. INFY"></label>
+        <label>Current price ₹<input type="number" id="mPrice" value="1500"></label>
+        <label>Yearly volatility %<input type="number" id="mVol" value="28"></label>
+        <label>Expected yearly return %<input type="number" id="mRet" value="10"></label>
+        <button id="mAdd" style="flex:0">Add</button>
+      </div>
+      <p class="muted">Hand-added stocks can be simulated but not backtested or ranked, because there's no price history. Typical yearly volatility: large caps 20–30%, mid caps 30–45%, small caps 45%+.</p>
+    </details>
+    </details>
+    <div id="msg" class="muted"></div>
+    <div id="stockList"></div>
+  </section>
+
+  <nav class="tabs" id="tabs">
+    <button data-t="sim" class="on">Simulate</button>
+    <button data-t="strat">Strategies</button>
+    <button data-t="best">Best today</button>
+    <button data-t="target">₹ Target plan</button>
+    <button data-t="intra">Intraday timing</button>
+  </nav>
+
+  <!-- SIMULATE -->
+  <section class="tab on card" id="tab-sim">
+    <h2>Where could it go?</h2>
+    <div class="row">
+      <label>Stock<select class="stockSel" id="simStock"></select></label>
+      <label>Horizon<select id="simH"><option value="1">1 day</option><option value="5">1 week</option><option value="21" selected>1 month</option><option value="63">3 months</option><option value="126">6 months</option><option value="252">1 year</option></select></label>
+      <label>Simulations<select id="simN"><option>500</option><option selected>2000</option><option>5000</option></select></label>
+      <label>Model<select id="simModel"><option value="boot" selected>Replay real past days</option><option value="gbm">Smooth random walk</option><option value="stress">Stress test (1.5× swings)</option></select></label>
+      <label>Trend assumption<select id="simDrift"><option value="neutral" selected>No trend (neutral)</option><option value="hist">Past trend continues</option><option value="custom">Custom yearly %</option></select></label>
+      <label id="customWrap" style="display:none">Custom yearly %<input type="number" id="simCustom" value="12"></label>
+      <button class="primary" id="simRun" style="flex:0">Run</button>
+    </div>
+    <div id="simOut"><div class="empty">Load stocks above, then press Run.</div></div>
+  </section>
+
+  <!-- STRATEGIES -->
+  <section class="tab card" id="tab-strat">
+    <h2>Which buy/sell rule would have worked?</h2>
+    <div class="row">
+      <label>Stock<select class="stockSel" data-hist="1" id="stStock"></select></label>
+      <label>Cost per trade (each side) %<input type="number" id="stCost" value="0.1" step="0.05"></label>
+      <button class="primary" id="stRun" style="flex:0">Backtest</button>
+    </div>
+    <p class="muted">Four common rules, tested on the real history and then on 300 simulated futures. A rule that only wins on the past is probably luck.</p>
+    <div id="stOut"><div class="empty">Needs a stock with uploaded history (or a demo stock).</div></div>
+  </section>
+
+  <!-- BEST -->
+  <section class="tab card" id="tab-best">
+    <h2>Which stock looks best right now?</h2>
+    <p class="muted">Ranks your loaded stocks on trend, momentum per unit of risk, and overbought/oversold readings, then simulates a trade plan for each: entry at the last close, stop 1.5 daily ranges below, target 2 daily ranges above.</p>
+    <button class="primary" id="bestRun">Rank my stocks</button>
+    <div id="bestOut"></div>
+  </section>
+
+  <!-- TARGET -->
+  <section class="tab card" id="tab-target">
+    <h2>Plan for a daily profit target</h2>
+    <div class="row">
+      <label>Capital ₹<input type="number" id="tgCap" value="1000000" step="50000"></label>
+      <label>Daily target ₹<input type="number" id="tgTarget" value="10000" step="1000"></label>
+      <label>Style<select id="tgStyle"><option value="intra" selected>Intraday (buy at open, sell at close)</option><option value="swing">Hold (close to close)</option></select></label>
+      <label>Costs per day (round trip) %<input type="number" id="tgCost" value="0.1" step="0.02"></label>
+      <label>Split money by<select id="tgAlloc"><option value="invvol" selected>Lower risk gets more</option><option value="equal">Equal</option><option value="score">Rank score</option></select></label>
+      <label>Max in one stock %<input type="number" id="tgMax" value="40"></label>
+      <label>Daily loss limit % of capital<input type="number" id="tgStop" value="1" step="0.25"></label>
+      <label>Trend<select id="tgDrift"><option value="hist">Use past trend</option><option value="neutral" selected>Remove past trend (safer)</option></select></label>
+    </div>
+    <h3>Stocks to use</h3>
+    <div id="tgPick" class="muted">Load stocks first.</div>
+    <div style="margin-top:10px"><button class="primary" id="tgRun">Build plan & simulate</button></div>
+    <div id="tgOut"></div>
+  </section>
+
+  <!-- INTRADAY -->
+  <section class="tab card" id="tab-intra">
+    <h2>Best time of day to buy and sell?</h2>
+    <p class="muted">Upload a 5- or 15-minute candle CSV (at least 20 trading days; 60+ is better). The tool finds the buy-time / sell-time pair that worked best on the first 70% of days, then checks it on the last 30% it never saw. If the pattern disappears on the unseen days, it was noise.</p>
+    <div class="row">
+      <label>Intraday data<select id="inSel"></select></label>
+      <button id="inDemo" style="flex:0">Load demo intraday</button>
+      <button class="primary" id="inRun" style="flex:0">Analyse</button>
+    </div>
+    <div id="inOut"></div>
+  </section>
+
+  <p class="muted" style="margin-top:20px">Everything runs on this page; uploaded files stay on your device. Past behaviour doesn't guarantee future results.</p>
+</div>
+
+<script id="preload" type="application/json">/*DATA*/</script>
+<script>/*CHARTJS*/</script>
+<script>
+"use strict";
+const $=s=>document.querySelector(s);
+const css=v=>getComputedStyle(document.documentElement).getPropertyValue(v).trim();
+const esc=s=>String(s).replace(/[&<>"]/g,c=>({"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;"}[c]));
+
+/* ---------- maths ---------- */
+function mulberry32(a){return function(){a|=0;a=a+0x6D2B79F5|0;let t=Math.imul(a^a>>>15,1|a);t=t+Math.imul(t^t>>>7,61|t)^t;return((t^t>>>14)>>>0)/4294967296}}
+let RNG=mulberry32(Date.now()&0xffffffff);
+let spare=null;
+function randn(){if(spare!==null){const s=spare;spare=null;return s}let u,v,s;do{u=RNG()*2-1;v=RNG()*2-1;s=u*u+v*v}while(s>=1||s===0);const m=Math.sqrt(-2*Math.log(s)/s);spare=v*m;return u*m}
+const mean=a=>a.reduce((s,x)=>s+x,0)/a.length;
+const std=a=>{const m=mean(a);return Math.sqrt(a.reduce((s,x)=>s+(x-m)**2,0)/Math.max(1,a.length-1))};
+function q(sorted,p){if(!sorted.length)return NaN;const i=(sorted.length-1)*p,lo=Math.floor(i),hi=Math.ceil(i);return sorted[lo]+(sorted[hi]-sorted[lo])*(i-lo)}
+const sortN=a=>Float64Array.from(a).sort();
+function smaSeries(c,n){const o=new Array(c.length).fill(NaN);let s=0;for(let i=0;i<c.length;i++){s+=c[i];if(i>=n)s-=c[i-n];if(i>=n-1)o[i]=s/n}return o}
+function rsiSeries(c,n=14){const o=new Array(c.length).fill(NaN);let g=0,l=0;for(let i=1;i<c.length;i++){const d=c[i]-c[i-1],up=Math.max(d,0),dn=Math.max(-d,0);if(i<=n){g+=up;l+=dn;if(i===n){g/=n;l/=n;o[i]=l===0?100:100-100/(1+g/l)}}else{g=(g*(n-1)+up)/n;l=(l*(n-1)+dn)/n;o[i]=l===0?100:100-100/(1+g/l)}}return o}
+
+/* ---------- formatting ---------- */
+const inr=v=>(v<0?"−":"")+"₹"+Math.abs(Math.round(v)).toLocaleString("en-IN");
+const pct=(v,d=1)=>(v>=0?"+":"−")+Math.abs(v*100).toFixed(d)+"%";
+const pc=(v,d=0)=>(v*100).toFixed(d)+"%";
+const px=v=>"₹"+(v>=1000?Math.round(v).toLocaleString("en-IN"):v.toFixed(2));
+const cls=v=>v>=0?"up":"down";
+const tile=(k,v,d="",c="")=>`<div class="tile"><div class="k">${k}</div><div class="v ${c}">${v}</div>${d?`<div class="d">${d}</div>`:""}</div>`;
+
+/* ---------- CSV parsing ---------- */
+function splitCSV(text){const rows=[];let row=[],cur="",inq=false;for(let i=0;i<text.length;i++){const ch=text[i];if(inq){if(ch==='"'){if(text[i+1]==='"'){cur+='"';i++}else inq=false}else cur+=ch}else{if(ch==='"')inq=true;else if(ch===","||ch==="\t"||ch===";"){row.push(cur);cur=""}else if(ch==="\n"||ch==="\r"){if(ch==="\r"&&text[i+1]==="\n")i++;row.push(cur);rows.push(row);row=[];cur=""}else cur+=ch}}if(cur.length||row.length){row.push(cur);rows.push(row)}return rows.filter(r=>r.some(c=>c.trim()!==""))}
+const num=s=>{const t=String(s??"").replace(/[",₹\s]/g,"");if(t===""||t==="-"||/null|nan/i.test(t))return NaN;return parseFloat(t)};
+const MON={jan:0,feb:1,mar:2,apr:3,may:4,jun:5,jul:6,aug:7,sep:8,oct:9,nov:10,dec:11};
+function mk(y,mo,da,h,mi,hasT){const p=n=>String(n).padStart(2,"0");return{t:Date.UTC(y,mo,da,h||0,mi||0),day:`${y}-${p(mo+1)}-${p(da)}`,hm:hasT?`${p(h)}:${p(mi)}`:null}}
+function fromIST(ms){const d=new Date(ms+330*60000);return mk(d.getUTCFullYear(),d.getUTCMonth(),d.getUTCDate(),d.getUTCHours(),d.getUTCMinutes(),true)}
+function parseDT(raw){
+  const s=String(raw).trim();
+  if(/^\d{9,13}(\.\d+)?$/.test(s)){let n=+s;if(n>1e12)n/=1000;return fromIST(n*1000)}
+  let y,mo,da,m;
+  if(m=s.match(/^(\d{4})[-\/](\d{1,2})[-\/](\d{1,2})/)){y=+m[1];mo=+m[2]-1;da=+m[3]}
+  else if(m=s.match(/^(\d{1,2})[-\/ ]([A-Za-z]{3})[A-Za-z]*[-\/ ,]+(\d{2,4})/)){da=+m[1];mo=MON[m[2].toLowerCase()];y=+m[3];if(y<100)y+=2000}
+  else if(m=s.match(/^([A-Za-z]{3})[A-Za-z]* (\d{1,2}),? (\d{4})/)){mo=MON[m[1].toLowerCase()];da=+m[2];y=+m[3]}
+  else if(m=s.match(/^(\d{1,2})[-\/.](\d{1,2})[-\/.](\d{4})/)){da=+m[1];mo=+m[2]-1;y=+m[3]}
+  else return null;
+  if(mo===undefined||!isFinite(y))return null;
+  const tm=s.slice(m[0].length).match(/(\d{1,2}):(\d{2})(?::\d{2})?(?:\.\d+)?\s*(AM|PM)?\s*(Z|[+-]\d{2}:?\d{2})?/i);
+  if(tm){let h=+tm[1],mi=+tm[2];if(tm[3]){const pm=/pm/i.test(tm[3]);if(pm&&h<12)h+=12;if(!pm&&h===12)h=0}
+    if(tm[4]){let off=0;if(tm[4].toUpperCase()!=="Z"){const o=tm[4].replace(":","");off=(o[0]==="-"?-1:1)*(+o.slice(1,3)*60+ +o.slice(3,5))}return fromIST(Date.UTC(y,mo,da,h,mi)-off*60000)}
+    return mk(y,mo,da,h,mi,true)}
+  return mk(y,mo,da,null,null,false)
+}
+function nameFrom(file){let n=file.replace(/\.[^.]+$/,"");const m=n.match(/Equity-([A-Z0-9&\-]+?)-(EQ|BE|BZ|SM)/i);if(m)return m[1].toUpperCase();n=n.replace(/[_]+/g," ").replace(/\s*\(\d+\)$/,"").trim();return n.length>24?n.slice(0,24):n}
+function parseFile(file,text){
+  const rows=splitCSV(text);const hi=rows.findIndex(r=>r.some(c=>/date|time/i.test(c)));
+  if(hi<0)throw new Error("no Date column found");
+  const H=rows[hi].map(c=>c.toLowerCase().replace(/[^a-z ]/g," ").replace(/\s+/g," ").trim());
+  const find=(re,ex)=>H.findIndex(h=>re.test(h)&&!(ex&&ex.test(h)));
+  const iD=find(/date|time/),iO=find(/^open/),iH=find(/^high/),iL=find(/^low/),iV=find(/^vol|volume/);
+  let iC=find(/^close$/);if(iC<0)iC=find(/close/,/prev|adj/);if(iC<0)iC=find(/adj close/);if(iC<0)iC=find(/^ltp|^last|^price/);
+  if(iC<0)throw new Error("no Close column found");
+  let bars=[];
+  for(const r of rows.slice(hi+1)){const dt=parseDT(r[iD]);const c=num(r[iC]);if(!dt||!isFinite(c)||c<=0)continue;
+    const g=i=>{const v=i>=0?num(r[i]):NaN;return isFinite(v)&&v>0?v:c};
+    bars.push({t:dt.t,day:dt.day,hm:dt.hm,o:g(iO),h:g(iH),l:g(iL),c,v:iV>=0?num(r[iV])||0:0})}
+  bars.sort((a,b)=>a.t-b.t);bars=bars.filter((b,i)=>i===0||b.t!==bars[i-1].t);
+  if(bars.length<10)throw new Error("too few valid rows");
+  const days=new Set(bars.map(b=>b.day)).size;
+  const intraday=bars[0].hm!==null&&days<bars.length*0.6;
+  return{name:nameFrom(file),bars,intraday,src:H.some(h=>h==="series"||h==="ltp")||/Quote-Equity/i.test(file)?"NSE":"file"}
+}
+
+/* ---------- state ---------- */
+const stocks=[];const intras=[];
+function prep(s){
+  if(s.kind==="manual"){s.rets=null;s.oc=null;return s}
+  const b=s.bars,c=b.map(x=>x.c);s.price=c.at(-1);s.closes=c;
+  const r=[],rd=[];for(let i=1;i<c.length;i++){r.push(Math.log(c[i]/c[i-1]));rd.push(b[i].day)}
+  s.rets=r.slice(-500);s.retDays=rd.slice(-500);s.mu=mean(s.rets);s.sigma=std(s.rets);
+  s.oc=b.slice(-500).map(x=>Math.log(x.c/x.o)).filter(isFinite);s.ocDays=b.slice(-500).map(x=>x.day);
+  s.hasOHLC=b.slice(-50).some(x=>x.o!==x.c);
+  const sm20=smaSeries(c,20),sm50=smaSeries(c,50),rs=rsiSeries(c);s.sma20=sm20.at(-1);s.sma50=sm50.at(-1);s.rsi=rs.at(-1);
+  let tr=[];for(let i=Math.max(1,b.length-14);i<b.length;i++){const p=b[i-1].c;tr.push(Math.max(b[i].h-b[i].l,Math.abs(b[i].h-p),Math.abs(b[i].l-p)))}
+  s.atr=mean(tr);if(!s.hasOHLC||!(s.atr>0))s.atr=s.price*s.sigma*1.2;
+  s.mom20=c.length>21?c.at(-1)/c.at(-22)-1:NaN;
+  return s
+}
+function addStock(s){const i=stocks.findIndex(x=>x.name===s.name);
+  if(i>=0&&stocks[i].kind==="hist"&&s.kind==="hist"){const m=new Map(stocks[i].bars.map(b=>[b.day,b]));s.bars.forEach(b=>m.set(b.day,b));s.bars=[...m.values()].sort((a,b)=>a.t-b.t);s.src=stocks[i].src||s.src}
+  if(i>=0)stocks.splice(i,1);stocks.push(prep(s))}
+function ageDays(day){return Math.round((Date.now()-Date.parse(day+"T10:00:00Z"))/864e5)}
+function nseLinks(){const syms=$("#nseSyms").value.split(/[,\s]+/).map(s=>s.trim().toUpperCase().replace(/\.NS$/,"")).filter(s=>/^[A-Z0-9&\-]{1,20}$/.test(s));
+  $("#nseLinks").innerHTML=syms.length?syms.map(s=>`<a class="chip" style="text-decoration:none;color:var(--accent);padding:6px 12px;font-size:14px" href="https://www.nseindia.com/get-quotes/equity?symbol=${encodeURIComponent(s)}" target="_blank" rel="noopener">${esc(s)} ↗</a>`).join(""):"<span class='muted'>Type at least one NSE symbol, e.g. SBIN.</span>";
+  try{localStorage.setItem("nseSyms",$("#nseSyms").value)}catch(e){}}
+try{const v=localStorage.getItem("nseSyms");if(v)$("#nseSyms").value=v}catch(e){}
+$("#nseGo").onclick=nseLinks;nseLinks();
+function renderStocks(){
+  const el=$("#stockList");
+  if(!stocks.length&&!intras.length){el.innerHTML="";return refreshSelects()}
+  const row=(s,i)=>`<div class="stock"><div><b>${esc(s.name)}</b> <span class="muted">${s.kind==="manual"?"hand-added":s.kind==="demo"?"demo (made-up data)":`${s.src==="NSE"||s.src==="AUTO"?"<span class='chip buy' style='font-size:11px'>NSE · real</span>":"real data"} ${s.bars.length} days, to ${s.bars.at(-1).day}${ageDays(s.bars.at(-1).day)>4?` <span class='down'>(${ageDays(s.bars.at(-1).day)} days old${s.src==="AUTO"?"":", so download fresh data"})</span>`:""}`}</span></div><div>${px(s.price)} <span class="muted">· swings ±${(s.sigma*100).toFixed(1)}%/day</span><button class="x" data-del="${i}" aria-label="Remove">×</button></div></div>`;
+  el.innerHTML=(stocks.length>12?`<details><summary>See all ${stocks.length} stocks</summary>${stocks.map(row).join("")}</details>`:stocks.map(row).join(""))+(stocks.length>12&&intras.length?`<details><summary>See ${intras.length} intraday (5-min) datasets</summary>${intraRows()}</details>`:intraRows());
+  function intraRows(){return intras.map((s,i)=>`<div class="stock"><div><b>${esc(s.name)}</b> <span class="muted">intraday · ${new Set(s.bars.map(b=>b.day)).size} days</span></div><div><button class="x" data-deli="${i}" aria-label="Remove">×</button></div></div>`).join("")}
+  refreshSelects()
+}
+$("#stockList").addEventListener("click",e=>{const d=e.target.dataset;if(d.del!==undefined){stocks.splice(+d.del,1);renderStocks()}if(d.deli!==undefined){intras.splice(+d.deli,1);renderStocks()}});
+function refreshSelects(){
+  document.querySelectorAll(".stockSel").forEach(sel=>{const v=sel.value;const list=stocks.filter(s=>!sel.dataset.hist||s.kind!=="manual");sel.innerHTML=list.length?list.map(s=>`<option value="${esc(s.name)}">${esc(s.name)}${s.full?" · "+esc(s.full.slice(0,28)):""}</option>`).join(""):"<option value=''>— load a stock —</option>";if(list.some(s=>s.name===v))sel.value=v});
+  const iv=$("#inSel").value;$("#inSel").innerHTML=intras.length?intras.map(s=>`<option>${esc(s.name)}</option>`).join(""):"<option value=''>— upload intraday CSV —</option>";if(intras.some(s=>s.name===iv))$("#inSel").value=iv;
+  renderPick()
+}
+const byName=n=>stocks.find(s=>s.name===n);
+
+$("#file").addEventListener("change",async e=>{
+  const out=[];for(const f of e.target.files){try{const p=parseFile(f.name,await f.text());if(p.intraday){const i=intras.findIndex(x=>x.name===p.name);if(i>=0)intras.splice(i,1);intras.push(p);out.push(`✓ ${esc(p.name)}: intraday, ${p.bars.length} candles`)}else{if(p.bars.length<30)throw new Error("need at least 30 days");addStock({name:p.name,kind:"hist",bars:p.bars,src:p.src});out.push(`✓ ${esc(p.name)}: ${p.bars.length} days`)}}catch(err){out.push(`✗ ${esc(f.name)}: ${esc(err.message)}`)}}
+  $("#msg").innerHTML=out.join("<br>");e.target.value="";renderStocks()
+});
+$("#mAdd").onclick=()=>{const name=$("#mName").value.trim()||"MY STOCK";const price=+$("#mPrice").value,vol=+$("#mVol").value/100,ret=+$("#mRet").value/100;if(!(price>0&&vol>0)){$("#msg").textContent="Enter a price and volatility above zero.";return}
+  const sigma=vol/Math.sqrt(252);addStock({name,kind:"manual",price,sigma,mu:Math.log(1+ret)/252});renderStocks()};
+
+/* demo data: made-up, clearly labelled */
+function demoBars(seed,start,annDrift,annVol,regimes,n=520){
+  const R=mulberry32(seed);const nz=()=>{let u=0;for(let i=0;i<6;i++)u+=R();return(u-3)*Math.SQRT2};
+  const bars=[];let p=start;let d=new Date(Date.UTC(2024,8,2));const sig=annVol/Math.sqrt(252);
+  for(let i=0;i<n;i++){while(d.getUTCDay()===0||d.getUTCDay()===6)d=new Date(d.getTime()+864e5);
+    const reg=regimes?regimes(i):0;const mu=annDrift/252+reg;const o=p*Math.exp(sig*0.3*nz());const c=o*Math.exp(mu+sig*0.95*nz());
+    const h=Math.max(o,c)*Math.exp(Math.abs(sig*0.45*nz()));const l=Math.min(o,c)*Math.exp(-Math.abs(sig*0.45*nz()));
+    bars.push({t:d.getTime(),day:d.toISOString().slice(0,10),hm:null,o,h,l,c,v:1e5});p=c;d=new Date(d.getTime()+864e5)}
+  return bars}
+$("#demoBtn").onclick=()=>{
+  addStock({name:"DEMO Trendy Ltd",kind:"demo",bars:demoBars(11,820,0.22,0.24,i=>i>440?0.0015:0)});
+  addStock({name:"DEMO Choppy Inds",kind:"demo",bars:demoBars(23,1450,0.0,0.30,i=>0.004*Math.sin(i/9))});
+  addStock({name:"DEMO Rocket Tech",kind:"demo",bars:demoBars(37,310,0.15,0.55,i=>i>470?-0.004:0)});
+  addStock({name:"DEMO Steady Power",kind:"demo",bars:demoBars(41,2400,0.09,0.16)});
+  $("#msg").textContent="Loaded 4 demo stocks. Their prices are invented, so use them to learn the tool, then upload real data.";renderStocks()};
+
+/* ---------- tabs ---------- */
+$("#tabs").addEventListener("click",e=>{const t=e.target.dataset.t;if(!t)return;document.querySelectorAll("#tabs button").forEach(b=>b.classList.toggle("on",b.dataset.t===t));document.querySelectorAll(".tab").forEach(x=>x.classList.toggle("on",x.id==="tab-"+t))});
+$("#simDrift").onchange=()=>$("#customWrap").style.display=$("#simDrift").value==="custom"?"flex":"none";
+
+/* ---------- charts ---------- */
+const charts={};
+function chart(id,cfg){if(charts[id])charts[id].destroy();const ink2=css("--ink2"),line=css("--line");
+  Chart.defaults.color=ink2;Chart.defaults.borderColor=line;Chart.defaults.font.size=11;
+  cfg.options=Object.assign({responsive:true,maintainAspectRatio:false,animation:false,interaction:{mode:"index",intersect:false}},cfg.options||{});
+  charts[id]=new Chart(document.getElementById(id),cfg)}
+const grid=()=>({color:css("--line")});
+
+/* ---------- Claude explanations (optional) ---------- */
+let sampler=null;
+try{if(window.claude&&window.claude.use)window.claude.use("sample").then(s=>{sampler=s;document.querySelectorAll(".aibtn").forEach(b=>b.style.display="")}).catch(()=>{})}catch(e){}
+function md(t){const lines=esc(t).replace(/\*\*(.+?)\*\*/g,"<b>$1</b>").split("\n");let h="",inUl=false;
+  for(const L of lines){const l=L.trim();if(/^[-*•] /.test(l)){if(!inUl){h+="<ul>";inUl=true}h+="<li>"+l.slice(2)+"</li>";continue}if(inUl){h+="</ul>";inUl=false}
+    if(/^#{1,4} /.test(l))h+="<h4>"+l.replace(/^#+ /,"")+"</h4>";else if(l)h+="<p style='margin:4px 0'>"+l+"</p>"}
+  return h+(inUl?"</ul>":"")}
+async function askClaude(btn,box,prompt){if(!sampler)return;btn.disabled=true;box.style.display="block";box.innerHTML="<span class='muted'>Thinking…</span>";
+  try{const r=await sampler(prompt,{onText:({text})=>{box.innerHTML=md(text)}});box.innerHTML=md(r.text)}
+  catch(e){box.innerHTML="<span class='muted'>"+(e&&e.code==="not_granted"?"Permission wasn't granted.":e&&e.code==="rate_limited"?"Too many requests, try again in a minute.":"Couldn't get an explanation right now.")+"</span>"}
+  btn.disabled=false}
+const AI_NOTE="Write for an Indian retail investor in plain, simple English. This is education, not personalised financial advice; don't promise returns. Your knowledge of companies may be out of date, so say so when relevant. Use short '## ' headings, '- ' bullets and **bold**. Keep it under 300 words.";
+
+/* ---------- SIMULATE ---------- */
+function simPaths(s,H,N,model,drift,customAnn){
+  const W=H+1,P=new Float32Array(N*W),sig=s.sigma*(model==="stress"?1.5:1);
+  const base=drift==="neutral"?-0.5*sig*sig:drift==="hist"?s.mu:Math.log(1+customAnn/100)/252-0.5*sig*sig;
+  const R=s.rets,boot=(model==="boot"||model==="stress")&&R&&R.length>20,rm=boot?mean(R):0,k=model==="stress"?1.5:1;
+  for(let n=0;n<N;n++){let p=s.price;P[n*W]=p;for(let t=1;t<=H;t++){const r=boot?(R[(RNG()*R.length)|0]-rm)*k+base:base+sig*randn();p*=Math.exp(r);P[n*W+t]=p}}
+  return P}
+let lastSim=null;
+$("#simRun").onclick=()=>{
+  const s=byName($("#simStock").value);if(!s){$("#simOut").innerHTML="<div class='empty'>Load a stock first.</div>";return}
+  const H=+$("#simH").value,N=+$("#simN").value,model=$("#simModel").value,drift=$("#simDrift").value;
+  const P=simPaths(s,H,N,model,drift,+$("#simCustom").value),W=H+1;
+  const B={p5:[],p25:[],p50:[],p75:[],p95:[]};const col=new Float64Array(N);
+  for(let t=0;t<W;t++){for(let n=0;n<N;n++)col[n]=P[n*W+t];col.sort();B.p5.push(q(col,.05));B.p25.push(q(col,.25));B.p50.push(q(col,.5));B.p75.push(q(col,.75));B.p95.push(q(col,.95))}
+  const fr=[];let dip10=0,dipUp=0,ups=0;
+  for(let n=0;n<N;n++){const e=P[n*W+H]/s.price-1;fr.push(e);let mn=Infinity;for(let t=1;t<W;t++)mn=Math.min(mn,P[n*W+t]);const dipped=mn/s.price-1<=-0.10;if(dipped)dip10++;if(e>0){ups++;if(dipped)dipUp++}}
+  const F=sortN(fr);const P_up=fr.filter(x=>x>0).length/N,P_10=fr.filter(x=>x>=.10).length/N,P_m10=fr.filter(x=>x<=-.10).length/N;
+  const hz=$("#simH").selectedOptions[0].text;
+  const sc=[["Bull case","90th percentile",q(F,.9),"Things go right: strong results or guidance, sector tailwind, a broad market rally, big institutional buying.","--up"],
+            ["Base case","middle outcome",q(F,.5),"Business as usual: no big surprise, the price mostly follows the market plus day-to-day noise.","--accent"],
+            ["Bear case","10th percentile",q(F,.1),"Things go wrong: results miss, sector sell-off, market correction or negative news.","--down"],
+            ["Bad tail","2nd percentile",q(F,.02),"A shock: fraud/regulatory news, crash-like market day, or a steep results miss. Rare but real.","--down"]];
+  lastSim={s,hz,N,P_up,P_10,P_m10,dip10:dip10/N,sc:sc.map(x=>[x[0],x[2]]),model,drift};
+  $("#simOut").innerHTML=`
+  <div class="tiles">
+   ${tile("Chance of being up",pc(P_up),"after "+hz)}
+   ${tile("Middle outcome",px(s.price*(1+q(F,.5))),pct(q(F,.5)),cls(q(F,.5)))}
+   ${tile("Chance of +10% or more",pc(P_10),"","up")}
+   ${tile("Chance of −10% or worse",pc(P_m10),"","down")}
+   ${tile("Bad case (1 in 20)",pct(q(F,.05)),"5% of futures end worse","down")}
+   ${tile("Good case (1 in 20)",pct(q(F,.95)),"5% of futures end better","up")}
+  </div>
+  <p class="big">Out of <b>${N.toLocaleString("en-IN")}</b> simulated futures, ${esc(s.name)} ended up in <b>${pc(P_up)}</b> of them. <b>${pc(dip10/N)}</b> of all paths fell 10% below today's price at some point${ups?`, including ${pc(dipUp/ups)} of the ones that finished higher`:""}. That's the pain you'd have to sit through.</p>
+  <h3>Possible price paths</h3>
+  <div class="legend"><span><i style="background:var(--path)"></i>sample futures</span><span><i style="background:var(--band2);height:8px"></i>middle 50%</span><span><i style="background:var(--band1);height:8px"></i>90% of outcomes</span><span><i style="background:var(--accent)"></i>median</span></div>
+  <div class="chartbox"><canvas id="cFan"></canvas></div>
+  <h3>Where it ends: ${esc(hz)} from now</h3>
+  <div class="chartbox sm"><canvas id="cHist"></canvas></div>
+  <h3>Scenarios</h3>
+  <div class="scen">${sc.map(x=>`<div class="tile" style="border-left-color:var(${x[4]})"><div class="k">${x[0]} · ${x[1]}</div><div class="v ${cls(x[2])}">${px(s.price*(1+x[2]))} <span style="font-size:14px">${pct(x[2])}</span></div><div class="d" style="font-size:12.5px;color:var(--ink2)">${x[3]}</div></div>`).join("")}</div>
+  ${insight(s,F,H)}
+  <button class="aibtn" id="simAi" style="display:${sampler?"":"none"};margin-top:12px">Ask Claude: why might it go each way?</button>
+  <div class="ai" id="simAiBox" style="display:none"></div>
+  <p class="muted">Model: ${model==="boot"?"replays randomly chosen real past days":model==="gbm"?"smooth bell-curve random walk (underestimates crashes)":"real past days with swings made 1.5× bigger"} · ${drift==="neutral"?"no trend assumed":drift==="hist"?"assumes the past trend ("+pct(Math.exp(s.mu*252)-1)+"/yr) continues, which is optimistic if it's been rising":"custom trend"}.</p>`;
+  const labels=Array.from({length:W},(_,i)=>i===0?"Now":"D"+i);const ds=[];
+  for(let k=0;k<Math.min(15,N);k++)ds.push({data:Array.from(P.subarray(k*W,k*W+W)),borderColor:css("--path"),borderWidth:1,pointRadius:0,tooltip:false});
+  ds.push({label:"95th pct",data:B.p95,borderWidth:0,pointRadius:0,fill:false},{label:"5th pct",data:B.p5,borderWidth:0,pointRadius:0,fill:"-1",backgroundColor:css("--band1")},
+   {label:"75th pct",data:B.p75,borderWidth:0,pointRadius:0,fill:false},{label:"25th pct",data:B.p25,borderWidth:0,pointRadius:0,fill:"-1",backgroundColor:css("--band2")},
+   {label:"Median",data:B.p50,borderColor:css("--accent"),borderWidth:2,pointRadius:0});
+  chart("cFan",{type:"line",data:{labels,datasets:ds},options:{plugins:{legend:{display:false},tooltip:{filter:i=>!!i.dataset.label,callbacks:{label:i=>i.dataset.label+": "+px(i.parsed.y)}}},scales:{x:{grid:{display:false},ticks:{maxTicksLimit:7}},y:{grid:grid(),ticks:{callback:v=>px(v)}}}}});
+  const lo=q(F,.005),hi=q(F,.995),nb=30,w=(hi-lo)/nb||1e-6,cnt=new Array(nb).fill(0);for(const x of fr){const b=Math.min(nb-1,Math.max(0,Math.floor((x-lo)/w)));cnt[b]++}
+  const mids=cnt.map((_,i)=>lo+w*(i+.5));
+  chart("cHist",{type:"bar",data:{labels:mids.map(m=>pct(m,0)),datasets:[{data:cnt.map(c=>c/N*100),backgroundColor:mids.map(m=>m>=0?css("--up"):css("--down")),borderRadius:3,barPercentage:.92,categoryPercentage:1}]},options:{plugins:{legend:{display:false},tooltip:{callbacks:{title:i=>"Ends near "+pct(mids[i[0].dataIndex]),label:i=>i.parsed.y.toFixed(1)+"% of futures"}}},scales:{x:{grid:{display:false},ticks:{maxTicksLimit:8}},y:{grid:grid(),ticks:{callback:v=>v+"%"}}}}});
+  const btn=$("#simAi");if(btn)btn.onclick=()=>{const L=lastSim;askClaude(btn,$("#simAiBox"),`${AI_NOTE}\n\nStock: "${L.s.name}" (NSE/BSE ticker or company name; if it starts with DEMO it's made-up practice data, so speak generally). Current price ₹${L.s.price.toFixed(2)}. Typical daily swing ±${(L.s.sigma*100).toFixed(2)}%. ${L.s.mom20===L.s.mom20&&L.s.mom20!==undefined?`Last 20 trading days: ${pct(L.s.mom20)}. RSI ${L.s.rsi.toFixed(0)}. Price ${L.s.price>L.s.sma50?"above":"below"} its 50-day average.`:""}\nSimulation over ${L.hz} (${L.N} futures): chance up ${pc(L.P_up)}, chance +10% ${pc(L.P_10)}, chance −10% ${pc(L.P_m10)}, ${pc(L.dip10)} of paths dip 10% at some point. Scenarios: ${L.sc.map(x=>x[0]+" "+pct(x[1])).join(", ")}.\n\nExplain: 1) what this company does and its main price drivers, if you recognise it; 2) for the bull, base and bear scenarios, what real-world events could cause each; 3) what to watch (results dates, sector, macro, rupee, crude, FII flows as relevant); 4) a sensible way to approach investing in it (position size, buying in parts, stop-loss) given these odds.`)}
+};
+function insight(s,F,H){const sd=s.sigma*Math.sqrt(H);const t=[];
+  t.push(`<li>A typical ${H===1?"day":"move over this period"} is about <b>±${(sd*100).toFixed(1)}%</b> (${px(s.price*sd)} per share).</li>`);
+  if(s.rsi===s.rsi&&s.rsi!==undefined){if(s.rsi>70)t.push("<li>RSI is <b>"+s.rsi.toFixed(0)+"</b>, which is overbought. Short pullbacks are common from here, so buying in parts is safer than all at once.</li>");else if(s.rsi<30)t.push("<li>RSI is <b>"+s.rsi.toFixed(0)+"</b>, which is oversold. Bounces happen, but falling stocks can keep falling.</li>")}
+  if(s.sma50===s.sma50&&s.sma50)t.push(`<li>Price is <b>${s.price>s.sma50?"above":"below"}</b> its 50-day average (${s.price>s.sma50?"uptrend":"downtrend"}).</li>`);
+  return `<h3>What this means</h3><ul style="margin:4px 0;padding-left:20px">${t.join("")}</ul>`}
+
+/* ---------- STRATEGIES ---------- */
+const STRATS=[{k:"bh",n:"Buy & hold",d:"Buy once and keep it.",c:"--accent"},{k:"sma",n:"Trend follow (20/50 avg)",d:"Own it while the 20-day average is above the 50-day; sell when it crosses below.",c:"--s2"},{k:"rsi",n:"Buy the dip (RSI)",d:"Buy when RSI drops below 30 (oversold), sell when it goes above 70.",c:"--s3"},{k:"brk",n:"Breakout",d:"Buy when price beats its 20-day high; sell when it breaks its 10-day low.",c:"--s4"}];
+function positions(c,k){const n=c.length,pos=new Array(n).fill(0);
+  if(k==="bh")pos.fill(1);
+  else if(k==="sma"){const a=smaSeries(c,20),b=smaSeries(c,50);for(let i=0;i<n;i++)pos[i]=a[i]>b[i]?1:0}
+  else if(k==="rsi"){const r=rsiSeries(c);let p=0;for(let i=0;i<n;i++){if(!p&&r[i]<30)p=1;else if(p&&r[i]>70)p=0;pos[i]=p}}
+  else if(k==="brk"){let p=0;for(let i=20;i<n;i++){let mx=-Infinity,mn=Infinity;for(let j=i-20;j<i;j++)mx=Math.max(mx,c[j]);for(let j=i-10;j<i;j++)mn=Math.min(mn,c[j]);if(!p&&c[i]>mx)p=1;else if(p&&c[i]<mn)p=0;pos[i]=p}}
+  return pos}
+function backtest(c,pos,cost,start){let e=1,prev=0,entry=null,peak=1,mdd=0,inMkt=0;const eq=[1],dr=[],trades=[];
+  for(let i=start;i<c.length-1;i++){const p=pos[i],e0=e;if(p!==prev){e*=1-cost;if(p)entry=e;else if(entry!==null){trades.push(e/entry-1);entry=null}}
+    if(p){e*=c[i+1]/c[i];inMkt++}dr.push(e/e0-1);eq.push(e);peak=Math.max(peak,e);mdd=Math.min(mdd,e/peak-1);prev=p}
+  if(entry!==null)trades.push(e/entry-1);
+  const sd=std(dr),days=c.length-1-start;
+  return{eq,total:e-1,cagr:Math.pow(e,252/Math.max(1,days))-1,sharpe:sd>0?mean(dr)/sd*Math.sqrt(252):0,mdd,trades:trades.length,win:trades.length?trades.filter(x=>x>0).length/trades.length:NaN,exposure:inMkt/Math.max(1,days),
+    now:pos.at(-1)&&!pos.at(-2)?"buy":!pos.at(-1)&&pos.at(-2)?"sell":pos.at(-1)?"hold":"wait"}}
+function synthCloses(R,len,start){const c=[start];while(c.length<len){const b=(RNG()*(R.length-10))|0;for(let k=0;k<10&&c.length<len;k++)c.push(c.at(-1)*Math.exp(R[b+k]))}return c}
+const SIG={buy:"<span class='chip buy'>BUY signal today</span>",sell:"<span class='chip sell'>SELL signal today</span>",hold:"<span class='chip buy'>Holding</span>",wait:"<span class='chip'>Waiting (in cash)</span>"};
+$("#stRun").onclick=()=>{
+  const s=byName($("#stStock").value);if(!s||!s.closes||s.closes.length<80){$("#stOut").innerHTML="<div class='empty'>Need a stock with at least 80 days of history.</div>";return}
+  const cost=+$("#stCost").value/100,c=s.closes.slice(-750),start=50;
+  const res=STRATS.map(st=>({...st,r:backtest(c,positions(c,st.k),cost,start)}));
+  const R=s.rets,M=300,rob=STRATS.map(()=>[]);
+  for(let m=0;m<M;m++){const sc=synthCloses(R,302,c.at(-1));STRATS.forEach((st,j)=>rob[j].push(backtest(sc,positions(sc,st.k),cost,50).total))}
+  const robS=rob.map(a=>{const F=sortN(a);return{med:q(F,.5),loss:a.filter(x=>x<0).length/a.length,bad:q(F,.1)}});
+  const bhRob=rob[0];const beat=rob.map(a=>a.filter((x,i)=>x>bhRob[i]).length/M);
+  const best=res.reduce((a,b,i)=>b.r.sharpe>res[a].r.sharpe?i:a,0);
+  const dates=s.bars.slice(-c.length).slice(start).map(b=>b.day);
+  $("#stOut").innerHTML=`
+   <h3>On ${esc(s.name)}'s real history (${dates.length-1} trading days)</h3>
+   <div class="legend">${res.map(x=>`<span><i style="background:var(${x.c})"></i>${x.n}</span>`).join("")}</div>
+   <div class="chartbox"><canvas id="cEq"></canvas></div>
+   <div class="tscroll"><table><tr><th>Rule</th><th>Return</th><th>Per year</th><th>Worst fall</th><th>Trades</th><th>Win rate</th><th>Return per risk</th><th>Today</th></tr>
+   ${res.map((x,i)=>`<tr><td><b>${x.n}</b>${i===best?" ⭐":""}<div class="muted">${x.d}</div></td><td class="${cls(x.r.total)}">${pct(x.r.total)}</td><td>${pct(x.r.cagr)}</td><td class="down">${pct(x.r.mdd)}</td><td>${x.r.trades}</td><td>${isNaN(x.r.win)?"–":pc(x.r.win)}</td><td>${x.r.sharpe.toFixed(2)}</td><td>${SIG[x.r.now]}</td></tr>`).join("")}
+   </table></div>
+   <p class="muted">"Return per risk" (Sharpe ratio) is return divided by how bumpy the ride was. Above 1 is good; below 0.5 is weak. ⭐ = best on this measure.</p>
+   <h3>On 300 simulated futures (about 1 year each)</h3>
+   <div class="tscroll"><table><tr><th>Rule</th><th>Typical return</th><th>Chance of losing</th><th>Bad year (1 in 10)</th><th>Beats buy & hold</th></tr>
+   ${res.map((x,i)=>`<tr><td><b>${x.n}</b></td><td class="${cls(robS[i].med)}">${pct(robS[i].med)}</td><td>${pc(robS[i].loss)}</td><td class="down">${pct(robS[i].bad)}</td><td>${i?pc(beat[i]):"–"}</td></tr>`).join("")}
+   </table></div>
+   <p class="big" style="margin-top:10px">${verdict(res,robS,beat,best)}</p>`;
+  chart("cEq",{type:"line",data:{labels:dates,datasets:res.map(x=>({label:x.n,data:x.r.eq.map(v=>(v-1)*100),borderColor:css(x.c),borderWidth:2,pointRadius:0}))},options:{plugins:{legend:{display:false},tooltip:{callbacks:{label:i=>i.dataset.label+": "+(i.parsed.y>=0?"+":"")+i.parsed.y.toFixed(1)+"%"}}},scales:{x:{grid:{display:false},ticks:{maxTicksLimit:6}},y:{grid:grid(),ticks:{callback:v=>v+"%"}}}}})
+};
+function verdict(res,robS,beat,best){const b=res[best];
+  const robustBest=robS.reduce((a,x,i)=>x.med-x.loss*0.05>robS[a].med-robS[a].loss*0.05?i:a,0);
+  let s=`On real history, <b>${b.n}</b> gave the best return for the risk taken.`;
+  if(best!==0&&beat[best]<0.5)s+=` But it beat buy & hold in only ${pc(beat[best])} of simulated futures, so its past edge may be luck.`;
+  else if(best!==0)s+=` It also beat buy & hold in ${pc(beat[best])} of simulated futures, which is a better sign.`;
+  if(robustBest!==best)s+=` Across simulated futures, <b>${res[robustBest].n}</b> held up best.`;
+  return s+" Whatever rule you choose, decide your stop-loss before you buy."}
+
+/* ---------- BEST TODAY ---------- */
+let ranking=[];
+function rankStocks(){
+  const L=stocks.filter(s=>s.kind!=="manual"&&s.closes&&s.closes.length>=60);
+  ranking=L.map(s=>{const ram=s.mom20/(s.sigma*Math.sqrt(20));const trend=(s.price>s.sma50?1:-1)+(s.sma20>s.sma50?1:-1);
+    const rsiAdj=s.rsi>75?-1:s.rsi>65?-0.3:s.rsi<30?0.3:0;const score=Math.max(-3,Math.min(3,ram))+0.6*trend+rsiAdj;
+    const why=[];why.push(s.price>s.sma50?"Above 50-day average (uptrend)":"Below 50-day average (downtrend)");
+    why.push(`Last 20 days ${pct(s.mom20)}${Math.abs(ram)>1.2?(ram>0?", strong for its volatility":", weak for its volatility"):""}`);
+    if(s.rsi>70)why.push(`RSI ${s.rsi.toFixed(0)}: overbought, chasing is risky`);else if(s.rsi<30)why.push(`RSI ${s.rsi.toFixed(0)}: oversold, bounce possible`);else why.push(`RSI ${s.rsi.toFixed(0)}: neutral`);
+    const entry=s.price,stop=entry-1.5*s.atr,tgt=entry+2*s.atr;
+    let win=0,lose=0;const N=1000,R=s.rets;for(let n=0;n<N;n++){let p=entry,done=false;for(let d=0;d<10;d++){p*=Math.exp(R[(RNG()*R.length)|0]);if(p>=tgt){win++;done=true;break}if(p<=stop){lose++;done=true;break}}}
+    const pW=win/N,pL=lose/N;const ev=(pW*2*s.atr-pL*1.5*s.atr)/entry;
+    return{s,score,why,entry,stop,tgt,pW,pL,ev}}).sort((a,b)=>b.score-a.score);
+  return ranking}
+$("#bestRun").onclick=()=>{
+  const r=rankStocks();if(!r.length){$("#bestOut").innerHTML="<div class='empty'>Need stocks with at least 60 days of history. Upload CSVs or load the demo stocks.</div>";return}
+  const top=r[0];
+  const rowB=(x,i)=>`<tr><td>${i+1}</td><td><b>${esc(x.s.name)}</b>${x.s.full?`<div class="muted">${esc(x.s.full)}</div>`:""}<div class="muted">score ${x.score.toFixed(2)}</div></td><td>${x.why.map(w=>"• "+esc(w)).join("<br>")}<div class="muted">Daily range ~${(x.s.atr/x.s.price*100).toFixed(1)}%</div></td><td>Buy ~${px(x.entry)}<br><span class="down">Stop ${px(x.stop)}</span><br><span class="up">Target ${px(x.tgt)}</span></td><td><span class="up">${pc(x.pW)}</span> / <span class="down">${pc(x.pL)}</span><div class="muted">EV ${pct(x.ev,2)}</div></td></tr>`;
+  $("#bestOut").innerHTML=`
+   <div class="tiles">${tile("Top pick by these rules",esc(top.s.name),"score "+top.score.toFixed(2))}${tile("Target hit first",pc(top.pW),"within 10 days","up")}${tile("Stop hit first",pc(top.pL),"within 10 days","down")}${tile("Expected per trade",pct(top.ev,2),"before costs",cls(top.ev))}</div>
+   <div class="tscroll"><table><tr><th>#</th><th>Stock</th><th>Why</th><th>Plan (₹/share)</th><th>Target first / Stop first</th></tr>
+   ${r.slice(0,15).map((x,i)=>rowB(x,i)).join("")}
+   </table></div>${r.length>15?`<details><summary>Show all ${r.length}</summary><div class="tscroll"><table>${r.slice(15).map((x,i)=>rowB(x,i+15)).join("")}</table></div></details>`:""}<div style="display:none"><table>
+   ${[].map((x,i)=>`<tr><td>${i+1}</td><td><b>${esc(x.s.name)}</b><div class="muted">score ${x.score.toFixed(2)}</div></td><td>${x.why.map(w=>"• "+esc(w)).join("<br>")}<div class="muted">Daily range ~${(x.s.atr/x.s.price*100).toFixed(1)}%</div></td><td>Buy ~${px(x.entry)}<br><span class="down">Stop ${px(x.stop)}</span><br><span class="up">Target ${px(x.tgt)}</span></td><td><span class="up">${pc(x.pW)}</span> / <span class="down">${pc(x.pL)}</span><div class="muted">EV ${pct(x.ev,2)}</div></td></tr>`).join("")}
+   </table></div>
+   <p class="muted">"Target first" means the share of 1,000 simulated 10-day futures (replaying this stock's real past days) where the price reached the target before the stop. With no edge at all you'd expect about 43%. Clearly above that suggests recent behaviour favours the trade; it doesn't promise it. A top rank here means "best by these rules today", not a guaranteed winner. Re-run each day with fresh data.</p>`;
+  renderPick()
+};
+
+/* ---------- TARGET PLAN ---------- */
+function renderPick(){const el=$("#tgPick");const L=stocks.filter(s=>s.kind!=="manual");if(!L.length){el.innerHTML="Load stocks with history first (upload or demo).";return}
+  const prev=new Set([...document.querySelectorAll("#tgPick input:checked")].map(i=>i.value));const top=new Set((ranking.length?ranking.slice(0,3).map(x=>x.s.name):L.slice(0,3).map(s=>s.name)));
+  const show=L.length>15?L.filter(s=>(ranking.slice(0,12).some(r=>r.s===s))||prev.has(s.name)):L;
+  el.innerHTML=(L.length>15?"<div class='muted' style='margin-bottom:4px'>Showing today's top 12 from <b>Best today</b>. Pick any stock in the other tabs to analyse it.</div>":"")+show.map(s=>`<label class="chip" style="cursor:pointer"><input type="checkbox" value="${esc(s.name)}" ${(prev.size?prev.has(s.name):top.has(s.name))?"checked":""}> ${esc(s.name)}</label>`).join("")}
+function capW(w,max){let x=w.slice();for(let it=0;it<20;it++){let over=0,freeSum=0;x=x.map(v=>{if(v>max){over+=v-max;return max}return v});if(over<1e-9)break;x.forEach(v=>{if(v<max)freeSum+=v});if(freeSum<=0)break;x=x.map(v=>v<max?v+over*v/freeSum:v)}const s=x.reduce((a,b)=>a+b,0);return x.map(v=>v/s)}
+$("#tgRun").onclick=()=>{
+  const names=[...document.querySelectorAll("#tgPick input:checked")].map(i=>i.value);const S=names.map(byName).filter(Boolean);
+  if(!S.length){$("#tgOut").innerHTML="<div class='empty'>Tick at least one stock.</div>";return}
+  const cap=+$("#tgCap").value,T=+$("#tgTarget").value,style=$("#tgStyle").value,cost=+$("#tgCost").value/100,maxW=Math.max(1/S.length,+$("#tgMax").value/100),stopPct=+$("#tgStop").value/100,neutral=$("#tgDrift").value==="neutral";
+  if(!(cap>0&&T>0)){$("#tgOut").innerHTML="<div class='empty'>Enter capital and target.</div>";return}
+  const series=S.map(s=>{const useOC=style==="intra"&&s.hasOHLC;const r=useOC?s.oc:s.rets,d=useOC?s.ocDays:s.retDays;const m=mean(r);return{r:neutral?r.map(x=>x-m):r,d,map:new Map(d.map((x,i)=>[x,neutral?r[i]-m:r[i]])),sd:std(r),m:neutral?0:m,useOC}});
+  if(!rankStocks().length)ranking=[];const scoreOf=s=>{const x=ranking.find(r=>r.s===s);return x?x.score:0};
+  let w=$("#tgAlloc").value==="equal"?S.map(()=>1):$("#tgAlloc").value==="invvol"?series.map(x=>1/x.sd):(()=>{const sc=S.map(scoreOf),mn=Math.min(...sc);return sc.map(v=>v-mn+0.5)})();
+  w=capW(w.map(v=>v/w.reduce((a,b)=>a+b,0)),maxW);
+  const amt=w.map(x=>x*cap);
+  let common=series[0].d.filter(d=>series.every(x=>x.map.has(d)));const joint=common.length>=60;
+  const K=20000,pnl=new Float64Array(K);
+  const dayPnl=()=>{let p=0;if(joint){const d=common[(RNG()*common.length)|0];series.forEach((x,i)=>p+=amt[i]*(Math.exp(x.map.get(d))-1))}else series.forEach((x,i)=>p+=amt[i]*(Math.exp(x.r[(RNG()*x.r.length)|0])-1));return p-cap*cost};
+  const stopAmt=-stopPct*cap;
+  for(let k=0;k<K;k++)pnl[k]=dayPnl();
+  const F=Float64Array.from(pnl).sort();const pHit=pnl.filter(x=>x>=T).length/K,pLoss=pnl.filter(x=>x<0).length/K,pStop=pnl.filter(x=>x<=stopAmt).length/K,avg=mean(pnl);
+  const Y=400,D=250,cum=[],ends=[];let ddHit=0,monthHit=0,M=0;const W=D+1,paths=new Float64Array(Y*W);
+  for(let y=0;y<Y;y++){let c=0,pk=0,dd=false;for(let d=1;d<=D;d++){c+=dayPnl();paths[y*W+d]=c;pk=Math.max(pk,c);if(c-pk<=-0.2*cap)dd=true;if(d%21===0){M++;}}ends.push(c);if(dd)ddHit++}
+  for(let m=0;m<4000;m++){let c=0;for(let d=0;d<21;d++)c+=dayPnl();if(c>=21*T)monthHit++}
+  const B={p10:[],p50:[],p90:[]};const col=new Float64Array(Y);for(let d=0;d<W;d++){for(let y=0;y<Y;y++)col[y]=paths[y*W+d];col.sort();B.p10.push(q(col,.1));B.p50.push(q(col,.5));B.p90.push(q(col,.9))}
+  const E=sortN(ends);const yearHit=ends.filter(x=>x>=D*T).length/Y;
+  const req=T/cap;const portSd=std(Array.from(pnl))/cap;
+  const histMean=series.reduce((a,x,i)=>a+w[i]*mean(x.r.map(v=>Math.exp(v)-1)),0);const net=histMean-cost;
+  const capNeed=net>0?T/net:Infinity;const annEq=Math.pow(1+req,250)-1;
+  $("#tgOut").innerHTML=`
+   <div class="warn" style="margin-top:12px">To make <b>${inr(T)}</b> a day on <b>${inr(cap)}</b> you need <b>${(req*100).toFixed(2)}% every day</b>. Compounded over a year that's <b>${annEq>100?"more than 10,000%":pc(annEq)}</b>. Top fund managers aim for 15–25% a year. This plan shows how often your target is realistically hit, and what the bad days look like.</div>
+   <h3>Today's allocation</h3>
+   <div class="tscroll"><table><tr><th>Stock</th><th>Share</th><th>Amount</th><th>Qty</th><th>Stop-loss</th><th>Typical day ±</th></tr>
+   ${S.map((s,i)=>{const qty=Math.floor(amt[i]/s.price);const stop=s.price*(1-Math.min(0.03,1.5*series[i].sd));return`<tr><td><b>${esc(s.name)}</b><div class="muted">${series[i].useOC?"open→close":"close→close"}</div></td><td>${pc(w[i])}</td><td>${inr(amt[i])}</td><td>${qty.toLocaleString("en-IN")} @ ${px(s.price)}</td><td class="down">${px(stop)}</td><td>${inr(amt[i]*series[i].sd)}</td></tr>`}).join("")}
+   </table></div>
+   <h3>What a day looks like (${K.toLocaleString("en-IN")} simulated days)</h3>
+   <div class="tiles">
+    ${tile("Days hitting "+inr(T)+"+",pc(pHit),"about "+Math.round(pHit*21)+" of 21 trading days a month",pHit>=.5?"up":"")}
+    ${tile("Losing days",pc(pLoss),"","down")}
+    ${tile("Average day",inr(avg),neutral?"trend removed, so mostly costs":"if the past trend repeats",cls(avg))}
+    ${tile("Bad day (1 in 20)",inr(q(F,.05)),"","down")}
+    ${tile("Good day (1 in 20)",inr(q(F,.95)),"","up")}
+    ${tile("Days breaking loss limit",pc(pStop),inr(stopAmt)+" limit","down")}
+   </div>
+   <div class="chartbox sm"><canvas id="cDay"></canvas></div>
+   <h3>Over a year (250 trading days, ${Y} simulations)</h3>
+   <div class="legend"><span><i style="background:var(--band1);height:8px"></i>80% of outcomes</span><span><i style="background:var(--accent)"></i>median</span><span><i style="background:var(--up)"></i>target pace (${inr(T)}/day)</span></div>
+   <div class="chartbox"><canvas id="cYear"></canvas></div>
+   <div class="tiles">
+    ${tile("Hit "+inr(21*T)+" in a month",pc(monthHit/4000))}
+    ${tile("Hit "+inr(D*T)+" in a year",pc(yearHit))}
+    ${tile("Median year",inr(q(E,.5)),"",cls(q(E,.5)))}
+    ${tile("Bad year (1 in 10)",inr(q(E,.1)),"","down")}
+    ${tile("Fell 20% of capital at some point",pc(ddHit/Y),"","down")}
+   </div>
+   <h3>The honest maths</h3>
+   <ul style="padding-left:20px;margin:4px 0">
+    <li>These stocks moved about <b>±${(portSd*100).toFixed(2)}%</b> on a typical day as a portfolio. You need <b>+${(req*100).toFixed(2)}%</b>, which is ${req>portSd?"<b>more than a normal day's swing</b>, so it only happens on unusually good days":"within a normal day's swing, so it happens on good days, but bad days of the same size happen too"}.</li>
+    <li>${net>0?`If the past average return repeats (${(histMean*100).toFixed(3)}%/day, ${(net*100).toFixed(3)}% after costs), an <i>average</i> day of ${inr(T)} would need about <b>${inr(capNeed)}</b> capital. Past averages rarely hold.`:`After costs, the average day for this mix is ${neutral?"slightly negative, because the trend was removed. That's the realistic baseline without a real edge":"negative. Costs eat the average return"}. Profit has to come from skill in picking entries, not from the plan itself.`}</li>
+    <li>Costs of ${(cost*100).toFixed(2)}% a day add up to about <b>${inr(cap*cost*250)}</b> a year at this capital.</li>
+   </ul>
+   <h3>Daily routine</h3>
+   <ol style="padding-left:20px;margin:4px 0">
+    <li>Before 9:15 AM: re-run <b>Best today</b> with fresh data and adjust the picks.</li>
+    <li>Place each stop-loss as soon as you buy. Never move it lower.</li>
+    <li>Stop for the day if you're down <b>${inr(-stopAmt)}</b> (your loss limit), or once you've reached ${inr(T)}.</li>
+    <li>Avoid the first 15 minutes unless the <b>Intraday timing</b> tab shows an edge that held up on unseen days.</li>
+    <li>Keep a log. After 20 days, compare your real results with this plan.</li>
+   </ol>
+   ${joint?"":"<p class='muted'>Note: these stocks don't share enough common dates, so their days were simulated independently. This understates how often they all fall together.</p>"}
+   <button class="aibtn" id="tgAi" style="display:${sampler?"":"none"};margin-top:12px">Ask Claude to review this plan</button><div class="ai" id="tgAiBox" style="display:none"></div>`;
+  const lo=q(F,.005),hi=q(F,.995),nb=30,bw=(hi-lo)/nb||1,cnt=new Array(nb).fill(0);for(const x of pnl){const b=Math.min(nb-1,Math.max(0,Math.floor((x-lo)/bw)));cnt[b]++}const mids=cnt.map((_,i)=>lo+bw*(i+.5));
+  chart("cDay",{type:"bar",data:{labels:mids.map(m=>inr(m)),datasets:[{data:cnt.map(c=>c/K*100),backgroundColor:mids.map(m=>m>=T?css("--up"):m>=0?css("--s3")+"88":css("--down")),borderRadius:3,barPercentage:.92,categoryPercentage:1}]},options:{plugins:{legend:{display:false},tooltip:{callbacks:{title:i=>"Day P&L ≈ "+inr(mids[i[0].dataIndex]),label:i=>i.parsed.y.toFixed(1)+"% of days"}}},scales:{x:{grid:{display:false},ticks:{maxTicksLimit:6}},y:{grid:grid(),ticks:{callback:v=>v+"%"}}}}});
+  chart("cYear",{type:"line",data:{labels:Array.from({length:W},(_,i)=>"Day "+i),datasets:[{label:"90th pct",data:B.p90,borderWidth:0,pointRadius:0},{label:"10th pct",data:B.p10,borderWidth:0,pointRadius:0,fill:"-1",backgroundColor:css("--band1")},{label:"Median",data:B.p50,borderColor:css("--accent"),borderWidth:2,pointRadius:0},{label:"Target pace",data:Array.from({length:W},(_,i)=>i*T),borderColor:css("--up"),borderWidth:2,borderDash:[5,4],pointRadius:0}]},options:{plugins:{legend:{display:false},tooltip:{callbacks:{label:i=>i.dataset.label+": "+inr(i.parsed.y)}}},scales:{x:{grid:{display:false},ticks:{maxTicksLimit:6}},y:{grid:grid(),ticks:{callback:v=>inr(v)}}}}});
+  const b=$("#tgAi");if(b)b.onclick=()=>askClaude(b,$("#tgAiBox"),`${AI_NOTE}\n\nReview this trading plan honestly. Capital ${inr(cap)}, daily target ${inr(T)} (${(req*100).toFixed(2)}%/day). Style: ${style==="intra"?"intraday":"holding"}. Allocation: ${S.map((s,i)=>s.name+" "+pc(w[i])).join(", ")}. Simulated: target hit on ${pc(pHit)} of days, losing days ${pc(pLoss)}, average day ${inr(avg)}, bad day (5th pct) ${inr(q(F,.05))}, chance of hitting the yearly total ${pc(yearHit)}, chance of a 20%-of-capital drawdown ${pc(ddHit/Y)}. Explain whether the target is realistic, what a more sustainable target might be for this capital, the biggest risks (overtrading, leverage, revenge trading, costs, taxes on short-term/intraday gains in India), and 4-5 concrete rules to protect capital.`)
+};
+
+/* ---------- INTRADAY ---------- */
+$("#inDemo").onclick=()=>{const R=mulberry32(99);const bars=[];let p=1000;let d=new Date(Date.UTC(2026,7,3));
+  for(let day=0;day<60;day++){while(d.getUTCDay()===0||d.getUTCDay()===6)d=new Date(d.getTime()+864e5);const ds=d.toISOString().slice(0,10);
+    for(let m=0;m<75;m++){const mins=9*60+15+m*5,h=Math.floor(mins/60),mi=mins%60;const u=Math.min(m,74-m);const vol=0.0011*(1+1.6*Math.exp(-u/6));let z=0;for(let k=0;k<6;k++)z+=R();z=(z-3)*Math.SQRT2;
+      const o=p,c=p*Math.exp(vol*z);bars.push({t:Date.UTC(2026,d.getUTCMonth(),d.getUTCDate(),h,mi),day:ds,hm:String(h).padStart(2,"0")+":"+String(mi).padStart(2,"0"),o,h:Math.max(o,c),l:Math.min(o,c),c,v:0});p=c}
+    d=new Date(d.getTime()+864e5)}
+  const i=intras.findIndex(x=>x.name==="DEMO intraday (pure noise)");if(i>=0)intras.splice(i,1);intras.push({name:"DEMO intraday (pure noise)",bars,intraday:true});renderStocks();$("#inSel").value="DEMO intraday (pure noise)"};
+$("#inRun").onclick=()=>{
+  const s=intras.find(x=>x.name===$("#inSel").value);if(!s){$("#inOut").innerHTML="<div class='empty'>Upload an intraday CSV or load the demo.</div>";return}
+  const byDay=new Map();for(const b of s.bars){if(!byDay.has(b.day))byDay.set(b.day,[]);byDay.get(b.day).push(b)}
+  const days=[...byDay.keys()].sort();if(days.length<10){$("#inOut").innerHTML="<div class='empty'>Need at least 10 trading days of candles.</div>";return}
+  const cnt=new Map();s.bars.forEach(b=>cnt.set(b.hm,(cnt.get(b.hm)||0)+1));
+  const times=[...cnt.keys()].filter(t=>cnt.get(t)>=days.length*0.7).sort();
+  const Tn=times.length,tIdx=new Map(times.map((t,i)=>[t,i]));
+  const grid2=days.map(d=>{const row=new Array(Tn).fill(NaN);const bs=byDay.get(d);bs.forEach(b=>{const i=tIdx.get(b.hm);if(i!==undefined)row[i]=b.c});return{open:bs[0].o,row,bs}});
+  const path=times.map((_,i)=>sortN(grid2.map(g=>g.row[i]/g.open-1).filter(isFinite)));
+  const volT=times.map((t,i)=>{const a=[];grid2.forEach(g=>{const prev=i?g.row[i-1]:g.open;if(isFinite(g.row[i])&&isFinite(prev))a.push(Math.abs(Math.log(g.row[i]/prev)))});return a.length?mean(a):0});
+  const split=Math.floor(days.length*0.7),IS=grid2.slice(0,split),OS=grid2.slice(split);
+  const evalPair=(set,i,j)=>{const a=[];set.forEach(g=>{const x=g.row[i],y=g.row[j];if(isFinite(x)&&isFinite(y))a.push(y/x-1)});return a.length?{m:mean(a),win:a.filter(v=>v>0).length/a.length,n:a.length}:{m:-Infinity,win:0,n:0}};
+  let best=null,worst=null;for(let i=0;i<Tn;i++)for(let j=i+1;j<Tn;j++){const r=evalPair(IS,i,j);if(!best||r.m>best.r.m)best={i,j,r};if(!worst||r.m<worst.r.m)worst={i,j,r}}
+  const os=evalPair(OS,best.i,best.j);const osS=evalPair(OS,worst.i,worst.j);
+  const holds=os.m>0&&os.win>0.55&&os.m>best.r.m*0.4;
+  const rangeOpen=mean(grid2.map(g=>{const f=g.bs.slice(0,Math.max(1,Math.round(g.bs.length*0.1)));return(Math.max(...f.map(b=>b.h))-Math.min(...f.map(b=>b.l)))/g.open}));
+  const dayRange=mean(grid2.map(g=>(Math.max(...g.bs.map(b=>b.h))-Math.min(...g.bs.map(b=>b.l)))/g.open));
+  const busiest=times.map((t,i)=>[t,volT[i]]).sort((a,b)=>b[1]-a[1]).slice(0,3).map(x=>x[0]);
+  $("#inOut").innerHTML=`
+   <div class="tiles">
+    ${tile("Best buy → sell (learning days)",times[best.i]+" → "+times[best.j],pct(best.r.m,2)+" avg · "+pc(best.r.win)+" win","up")}
+    ${tile("Same rule on unseen days",pct(os.m,2),pc(os.win)+" of "+os.n+" days profitable",cls(os.m))}
+    ${tile("Verdict",holds?"Pattern held up":"Likely noise",holds?"still test with small size":"don't trade on it",holds?"up":"down")}
+    ${tile("Typical day range",(dayRange*100).toFixed(2)+"%","first 10% of session: "+(rangeOpen*100).toFixed(2)+"%")}
+   </div>
+   <p class="big">${holds?`Buying near <b>${times[best.i]}</b> and selling near <b>${times[best.j]}</b> worked on ${split} learning days and still worked on ${OS.length} days it never saw. That's encouraging, but ${OS.length} days is a small sample: confirm on more data before sizing up.`:`On the ${split} learning days, buying at <b>${times[best.i]}</b> and selling at <b>${times[best.j]}</b> looked great (${pct(best.r.m,2)} a day). On the ${OS.length} unseen days it made ${pct(os.m,2)}. That drop is what a random pattern looks like. With enough time pairs to choose from, one always looks great in hindsight.`}</p>
+   <h3>Average path through the day (% from open)</h3>
+   <div class="legend"><span><i style="background:var(--band2);height:8px"></i>middle 50% of days</span><span><i style="background:var(--accent)"></i>median day</span></div>
+   <div class="chartbox"><canvas id="cIn"></canvas></div>
+   <h3>When does it move most?</h3>
+   <div class="chartbox sm"><canvas id="cVol"></canvas></div>
+   <p class="muted">Most active: ${busiest.join(", ")}. Big moves near the open and close mean bigger profits <i>and</i> bigger losses. If you trade then, use smaller size and wider stops.${s.name.startsWith("DEMO")?" This demo is pure random noise with no real pattern, so watch how the \"best time\" fails on the unseen days.":""}</p>`;
+  chart("cIn",{type:"line",data:{labels:times,datasets:[{label:"75th",data:path.map(a=>q(a,.75)*100),borderWidth:0,pointRadius:0},{label:"25th",data:path.map(a=>q(a,.25)*100),borderWidth:0,pointRadius:0,fill:"-1",backgroundColor:css("--band2")},{label:"Median",data:path.map(a=>q(a,.5)*100),borderColor:css("--accent"),borderWidth:2,pointRadius:0}]},options:{plugins:{legend:{display:false},tooltip:{callbacks:{label:i=>i.dataset.label+": "+i.parsed.y.toFixed(2)+"%"}}},scales:{x:{grid:{display:false},ticks:{maxTicksLimit:7}},y:{grid:grid(),ticks:{callback:v=>v.toFixed(1)+"%"}}}}});
+  chart("cVol",{type:"bar",data:{labels:times,datasets:[{label:"Avg move",data:volT.map(v=>v*100),backgroundColor:css("--accent"),borderRadius:2,barPercentage:.9,categoryPercentage:1}]},options:{plugins:{legend:{display:false},tooltip:{callbacks:{label:i=>"Avg move: "+i.parsed.y.toFixed(3)+"%"}}},scales:{x:{grid:{display:false},ticks:{maxTicksLimit:7}},y:{grid:grid(),ticks:{callback:v=>v.toFixed(2)+"%"}}}}});
+};
+
+let AUTO=null;
+try{const t=document.getElementById("preload").textContent.trim();if(t[0]==="{")AUTO=JSON.parse(t)}catch(e){}
+if(AUTO&&AUTO.daily){
+  for(const sym of Object.keys(AUTO.daily).sort()){const x=AUTO.daily[sym];if(x.d.length<60)continue;
+    stocks.push(prep({name:sym,full:x.n||"",kind:"hist",src:"AUTO",bars:x.d.map((day,i)=>({t:Date.parse(day+"T00:00:00Z"),day,hm:null,o:x.o[i],h:x.h[i],l:x.l[i],c:x.c[i],v:x.v?x.v[i]:0}))}))}
+  for(const sym of Object.keys(AUTO.intraday||{})){const x=AUTO.intraday[sym];
+    intras.push({name:sym+" · 5-min",intraday:true,bars:x.t.map((s,i)=>{const day=s.slice(0,10),hm=s.slice(11,16);return{t:Date.parse(day+"T"+hm+":00Z"),day,hm,o:x.o[i],h:x.h[i],l:x.l[i],c:x.c[i],v:0}})})}
+  const m=AUTO.meta||{},age=m.asof?ageDays(m.asof):0;
+  $("#autoBox").innerHTML=`<div class="tile" style="margin:6px 0 10px"><div class="k">Live NSE data, loaded automatically</div><div class="v" style="font-size:16px">${stocks.length} stocks · prices up to ${esc(m.asof||"?")}</div><div class="d">Refreshed every weekday after market close${m.updated?" · last update "+esc(new Date(m.updated).toLocaleString("en-IN",{dateStyle:"medium",timeStyle:"short"})):""}${age>4?" · <span class='down'>looks stale: the daily update may have failed</span>":""}</div></div>`;
+  $("#manualBox").open=false;$("#manualSum").style.display="";
+  renderStocks();
+  setTimeout(()=>{$("#bestRun").click();if(ranking[0]){$("#simStock").value=ranking[0].s.name;$("#stStock").value=ranking[0].s.name}renderPick()},50);
+}else renderStocks();
+</script>
+</body>
+</html>
