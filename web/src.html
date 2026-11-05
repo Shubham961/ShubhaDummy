@@ -31,7 +31,7 @@ button:disabled{opacity:.5;cursor:default}
 .btn input{display:none}
 .row{display:flex;flex-wrap:wrap;gap:10px;align-items:flex-end}
 .row>label{display:flex;flex-direction:column;font-size:12.5px;color:var(--ink2);gap:3px;min-width:120px;flex:1}
-input[type=number],input[type=text],select{font:inherit;font-size:15px;padding:7px 8px;border:1px solid var(--line);border-radius:8px;background:var(--bg);color:var(--ink);width:100%}
+input[type=number],input[type=text],input[type=search],select{font:inherit;font-size:15px;padding:7px 8px;border:1px solid var(--line);border-radius:8px;background:var(--bg);color:var(--ink);width:100%}
 .tabs{position:sticky;top:0;z-index:5;background:var(--bg);display:flex;gap:6px;overflow-x:auto;padding:8px 0;scrollbar-width:none}
 .tabs button{white-space:nowrap;border-radius:20px}
 .tabs button.on{background:var(--ink);color:var(--bg);border-color:var(--ink)}
@@ -59,6 +59,16 @@ th{font-size:12px;color:var(--ink2);font-weight:600}
 .legend{display:flex;flex-wrap:wrap;gap:12px;font-size:12.5px;color:var(--ink2)}
 .legend i{display:inline-block;width:12px;height:3px;border-radius:2px;vertical-align:middle;margin-right:5px}
 details summary{cursor:pointer;color:var(--accent);font-size:14px;margin:8px 0}
+.combo{position:relative}
+.row>label:has(.combo){flex-basis:100%}
+.combo input{padding-right:28px}
+.combo-list{position:absolute;left:0;right:0;top:calc(100% + 2px);z-index:30;background:var(--card);border:1px solid var(--line);border-radius:8px;max-height:300px;overflow-y:auto;display:none;box-shadow:0 8px 24px rgba(0,0,0,.18);text-align:left}
+.combo-list.on{display:block}
+.combo-list div{padding:10px 11px;border-bottom:1px solid var(--line);font-size:14px;color:var(--ink);cursor:pointer}
+.combo-list div:last-child{border-bottom:none}
+.combo-list div.act,.combo-list div:hover{background:var(--bg)}
+.combo-list div span{color:var(--muted);font-size:12.5px;margin-left:6px}
+.combo-list .none{color:var(--muted);cursor:default}
 .empty{color:var(--muted);text-align:center;padding:20px 8px}
 .big{font-size:15px}
 </style>
@@ -165,6 +175,7 @@ details summary{cursor:pointer;color:var(--accent);font-size:14px;margin:8px 0}
     </div>
     <h3>Stocks to use</h3>
     <div id="tgPick" class="muted">Load stocks first.</div>
+    <div class="row" style="margin-top:8px"><label>Add any stock to the plan<select class="stockSel" data-hist="1" data-blank="1" id="tgAdd"></select></label></div>
     <div style="margin-top:10px"><button class="primary" id="tgRun">Build plan & simulate</button></div>
     <div id="tgOut"></div>
   </section>
@@ -288,9 +299,9 @@ function renderStocks(){
 }
 $("#stockList").addEventListener("click",e=>{const d=e.target.dataset;if(d.del!==undefined){stocks.splice(+d.del,1);renderStocks()}if(d.deli!==undefined){intras.splice(+d.deli,1);renderStocks()}});
 function refreshSelects(){
-  document.querySelectorAll(".stockSel").forEach(sel=>{const v=sel.value;const list=stocks.filter(s=>!sel.dataset.hist||s.kind!=="manual");sel.innerHTML=list.length?list.map(s=>`<option value="${esc(s.name)}">${esc(s.name)}${s.full?" · "+esc(s.full.slice(0,28)):""}</option>`).join(""):"<option value=''>— load a stock —</option>";if(list.some(s=>s.name===v))sel.value=v});
+  document.querySelectorAll(".stockSel").forEach(sel=>{const v=sel.value;const list=stocks.filter(s=>!sel.dataset.hist||s.kind!=="manual");sel.innerHTML=list.length?list.map(s=>`<option value="${esc(s.name)}">${esc(s.name)}${s.full?" · "+esc(s.full.slice(0,42)):""}</option>`).join(""):"<option value=''>— load a stock —</option>";if(list.some(s=>s.name===v))sel.value=v});
   const iv=$("#inSel").value;$("#inSel").innerHTML=intras.length?intras.map(s=>`<option>${esc(s.name)}</option>`).join(""):"<option value=''>— upload intraday CSV —</option>";if(intras.some(s=>s.name===iv))$("#inSel").value=iv;
-  renderPick()
+  syncCombos();renderPick()
 }
 const byName=n=>stocks.find(s=>s.name===n);
 
@@ -316,6 +327,35 @@ $("#demoBtn").onclick=()=>{
   addStock({name:"DEMO Rocket Tech",kind:"demo",bars:demoBars(37,310,0.15,0.55,i=>i>470?-0.004:0)});
   addStock({name:"DEMO Steady Power",kind:"demo",bars:demoBars(41,2400,0.09,0.16)});
   $("#msg").textContent="Loaded 4 demo stocks. Their prices are invented, so use them to learn the tool, then upload real data.";renderStocks()};
+
+/* ---------- searchable stock picker ---------- */
+const combos=[];
+function makeCombo(sel){
+  const wrap=document.createElement("div");wrap.className="combo";
+  const inp=document.createElement("input");inp.type="search";inp.autocomplete="off";inp.spellcheck=false;
+  inp.placeholder=sel.dataset.blank?"Search symbol or company…":"Search, e.g. TCS or Tata";
+  const list=document.createElement("div");list.className="combo-list";list.setAttribute("role","listbox");
+  sel.style.display="none";sel.parentNode.insertBefore(wrap,sel);wrap.append(inp,list);
+  let items=[],act=0;
+  const label=o=>o?o.textContent:"";
+  function sync(){inp.value=sel.dataset.blank?"":label(sel.selectedOptions[0])}
+  function show(){const qv=inp.value.trim().toLowerCase();const opts=[...sel.options].filter(o=>o.value);
+    items=opts.map(o=>{const t=o.textContent,sym=o.value.toLowerCase(),tl=t.toLowerCase();
+      const r=!qv?2:sym===qv?0:sym.startsWith(qv)?1:tl.split(/[\s·.\-&]+/).some(w=>w.startsWith(qv))?2:tl.includes(qv)?3:-1;return{o,r}}).filter(x=>x.r>=0).sort((a,b)=>a.r-b.r||a.o.value.localeCompare(b.o.value));
+    act=0;
+    list.innerHTML=items.length?items.slice(0,60).map((x,i)=>{const [a,...b]=x.o.textContent.split(" · ");return`<div data-i="${i}" class="${i===act?"act":""}" role="option">${esc(a)}${b.length?`<span>${esc(b.join(" · "))}</span>`:""}</div>`}).join("")+(items.length>60?`<div class="none">…${items.length-60} more, keep typing</div>`:""):`<div class="none">No match. Upload its NSE CSV to add it.</div>`;
+    list.classList.add("on")}
+  function pick(i){const x=items[i];if(!x)return;sel.value=x.o.value;list.classList.remove("on");sync();if(!sel.dataset.blank)inp.blur();sel.dispatchEvent(new Event("change"))}
+  inp.addEventListener("focus",()=>{inp.select();show();setTimeout(()=>{const r=wrap.getBoundingClientRect();if(r.top>window.innerHeight*0.3||r.top<60)window.scrollBy({top:r.top-70,behavior:"smooth"})},250)});
+  inp.addEventListener("input",show);
+  inp.addEventListener("keydown",e=>{if(!list.classList.contains("on"))return;
+    if(e.key==="ArrowDown"||e.key==="ArrowUp"){e.preventDefault();act=Math.max(0,Math.min(Math.min(items.length,60)-1,act+(e.key==="ArrowDown"?1:-1)));list.querySelectorAll("[data-i]").forEach(d=>d.classList.toggle("act",+d.dataset.i===act));list.querySelector(".act")?.scrollIntoView({block:"nearest"})}
+    else if(e.key==="Enter"){e.preventDefault();pick(act)}else if(e.key==="Escape"){list.classList.remove("on");sync();inp.blur()}});
+  list.addEventListener("pointerdown",e=>{const d=e.target.closest("[data-i]");if(d){e.preventDefault();pick(+d.dataset.i)}});
+  inp.addEventListener("blur",()=>setTimeout(()=>{list.classList.remove("on");sync()},150));
+  const c={sel,sync};combos.push(c);sync();return c}
+const syncCombos=()=>combos.forEach(c=>c.sync());
+const extraPick=new Set();
 
 /* ---------- tabs ---------- */
 $("#tabs").addEventListener("click",e=>{const t=e.target.dataset.t;if(!t)return;document.querySelectorAll("#tabs button").forEach(b=>b.classList.toggle("on",b.dataset.t===t));document.querySelectorAll(".tab").forEach(x=>x.classList.toggle("on",x.id==="tab-"+t))});
@@ -485,8 +525,9 @@ $("#bestRun").onclick=()=>{
 /* ---------- TARGET PLAN ---------- */
 function renderPick(){const el=$("#tgPick");const L=stocks.filter(s=>s.kind!=="manual");if(!L.length){el.innerHTML="Load stocks with history first (upload or demo).";return}
   const prev=new Set([...document.querySelectorAll("#tgPick input:checked")].map(i=>i.value));const top=new Set((ranking.length?ranking.slice(0,3).map(x=>x.s.name):L.slice(0,3).map(s=>s.name)));
+  extraPick.forEach(n=>prev.add(n));
   const show=L.length>15?L.filter(s=>(ranking.slice(0,12).some(r=>r.s===s))||prev.has(s.name)):L;
-  el.innerHTML=(L.length>15?"<div class='muted' style='margin-bottom:4px'>Showing today's top 12 from <b>Best today</b>. Pick any stock in the other tabs to analyse it.</div>":"")+show.map(s=>`<label class="chip" style="cursor:pointer"><input type="checkbox" value="${esc(s.name)}" ${(prev.size?prev.has(s.name):top.has(s.name))?"checked":""}> ${esc(s.name)}</label>`).join("")}
+  el.innerHTML=(L.length>15?"<div class='muted' style='margin-bottom:4px'>Showing today's top 12 from <b>Best today</b>. Search below to add any other stock.</div>":"")+show.map(s=>`<label class="chip" style="cursor:pointer"><input type="checkbox" value="${esc(s.name)}" ${(prev.size?prev.has(s.name):top.has(s.name)||extraPick.has(s.name))?"checked":""}> ${esc(s.name)}</label>`).join("")}
 function capW(w,max){let x=w.slice();for(let it=0;it<20;it++){let over=0,freeSum=0;x=x.map(v=>{if(v>max){over+=v-max;return max}return v});if(over<1e-9)break;x.forEach(v=>{if(v<max)freeSum+=v});if(freeSum<=0)break;x=x.map(v=>v<max?v+over*v/freeSum:v)}const s=x.reduce((a,b)=>a+b,0);return x.map(v=>v/s)}
 $("#tgRun").onclick=()=>{
   const names=[...document.querySelectorAll("#tgPick input:checked")].map(i=>i.value);const S=names.map(byName).filter(Boolean);
@@ -566,7 +607,7 @@ $("#inDemo").onclick=()=>{const R=mulberry32(99);const bars=[];let p=1000;let d=
     for(let m=0;m<75;m++){const mins=9*60+15+m*5,h=Math.floor(mins/60),mi=mins%60;const u=Math.min(m,74-m);const vol=0.0011*(1+1.6*Math.exp(-u/6));let z=0;for(let k=0;k<6;k++)z+=R();z=(z-3)*Math.SQRT2;
       const o=p,c=p*Math.exp(vol*z);bars.push({t:Date.UTC(2026,d.getUTCMonth(),d.getUTCDate(),h,mi),day:ds,hm:String(h).padStart(2,"0")+":"+String(mi).padStart(2,"0"),o,h:Math.max(o,c),l:Math.min(o,c),c,v:0});p=c}
     d=new Date(d.getTime()+864e5)}
-  const i=intras.findIndex(x=>x.name==="DEMO intraday (pure noise)");if(i>=0)intras.splice(i,1);intras.push({name:"DEMO intraday (pure noise)",bars,intraday:true});renderStocks();$("#inSel").value="DEMO intraday (pure noise)"};
+  const i=intras.findIndex(x=>x.name==="DEMO intraday (pure noise)");if(i>=0)intras.splice(i,1);intras.push({name:"DEMO intraday (pure noise)",bars,intraday:true});renderStocks();$("#inSel").value="DEMO intraday (pure noise)";syncCombos()};
 $("#inRun").onclick=()=>{
   const s=intras.find(x=>x.name===$("#inSel").value);if(!s){$("#inOut").innerHTML="<div class='empty'>Upload an intraday CSV or load the demo.</div>";return}
   const byDay=new Map();for(const b of s.bars){if(!byDay.has(b.day))byDay.set(b.day,[]);byDay.get(b.day).push(b)}
@@ -603,6 +644,8 @@ $("#inRun").onclick=()=>{
   chart("cVol",{type:"bar",data:{labels:times,datasets:[{label:"Avg move",data:volT.map(v=>v*100),backgroundColor:css("--accent"),borderRadius:2,barPercentage:.9,categoryPercentage:1}]},options:{plugins:{legend:{display:false},tooltip:{callbacks:{label:i=>"Avg move: "+i.parsed.y.toFixed(3)+"%"}}},scales:{x:{grid:{display:false},ticks:{maxTicksLimit:7}},y:{grid:grid(),ticks:{callback:v=>v.toFixed(2)+"%"}}}}});
 };
 
+document.querySelectorAll(".stockSel,#inSel").forEach(makeCombo);
+$("#tgAdd").addEventListener("change",()=>{const v=$("#tgAdd").value;if(v){extraPick.add(v);renderPick()}});
 let AUTO=null;
 try{const t=document.getElementById("preload").textContent.trim();if(t[0]==="{")AUTO=JSON.parse(t)}catch(e){}
 if(AUTO&&AUTO.daily){
@@ -614,7 +657,7 @@ if(AUTO&&AUTO.daily){
   $("#autoBox").innerHTML=`<div class="tile" style="margin:6px 0 10px"><div class="k">Live NSE data, loaded automatically</div><div class="v" style="font-size:16px">${stocks.length} stocks · prices up to ${esc(m.asof||"?")}</div><div class="d">Refreshed every weekday after market close${m.updated?" · last update "+esc(new Date(m.updated).toLocaleString("en-IN",{dateStyle:"medium",timeStyle:"short"})):""}${age>4?" · <span class='down'>looks stale: the daily update may have failed</span>":""}</div></div>`;
   $("#manualBox").open=false;$("#manualSum").style.display="";
   renderStocks();
-  setTimeout(()=>{$("#bestRun").click();if(ranking[0]){$("#simStock").value=ranking[0].s.name;$("#stStock").value=ranking[0].s.name}renderPick()},50);
+  setTimeout(()=>{$("#bestRun").click();if(ranking[0]){$("#simStock").value=ranking[0].s.name;$("#stStock").value=ranking[0].s.name}syncCombos();renderPick()},50);
 }else renderStocks();
 </script>
 </body>
