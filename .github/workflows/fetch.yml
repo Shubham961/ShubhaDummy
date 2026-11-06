@@ -2,6 +2,7 @@ name: Fetch NSE prices
 on:
   schedule:
     - cron: "0 11 * * 1-5"   # 4:30 PM IST, Mon-Fri, after market close
+    - cron: "15 2 * * 1-5"   # 7:45 AM IST, Mon-Fri, morning news before market open
   workflow_dispatch:
 permissions:
   contents: write
@@ -14,7 +15,7 @@ jobs:
       - uses: actions/setup-python@v5
         with:
           python-version: "3.12"
-      - run: pip install --quiet yfinance pandas requests
+      - run: pip install --quiet yfinance pandas requests feedparser
       - run: python fetch.py
       - run: python build.py
       - name: Publish to the data branch (one commit, history not kept)

@@ -1,6 +1,7 @@
 """Download daily (2y) and 5-minute (60d) NSE prices via Yahoo Finance into data/*.json."""
 import io, json, os, sys, time, datetime
 import pandas as pd, requests, yfinance as yf
+from fetch_news import collect
 
 def read_list(path):
     if not os.path.exists(path): return []
@@ -67,10 +68,15 @@ def main():
         intra[s] = {"t": [d.strftime("%Y-%m-%d %H:%M") for d in idx],
                     "o": r2(x["Open"]), "h": r2(x["High"]), "l": r2(x["Low"]), "c": r2(x["Close"])}
     print(f"Intraday: {len(intra)} ok")
+    try:
+        news = collect()
+    except Exception as e:
+        print("news failed:", e); news = []
+    print(f"News: {len(news)} headlines")
     asof = max(v["d"][-1] for v in daily.values())
     meta = {"updated": datetime.datetime.now(datetime.timezone.utc).isoformat(timespec="minutes"),
             "asof": asof, "count": len(daily), "missing": missing}
-    json.dump({"meta": meta, "daily": daily, "intraday": intra}, open("data/market.json", "w"), separators=(",", ":"))
+    json.dump({"meta": meta, "daily": daily, "intraday": intra, "news": news}, open("data/market.json", "w"), separators=(",", ":"))
     print("as of", asof)
 
 if __name__ == "__main__":
