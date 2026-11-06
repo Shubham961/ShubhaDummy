@@ -79,6 +79,11 @@ details summary{cursor:pointer;color:var(--accent);font-size:14px;margin:8px 0}
 .sugg button{font-size:13px;padding:6px 10px;border-radius:16px}
 .chatbar{display:flex;gap:8px;align-items:flex-end}
 .chatbar textarea{flex:1;font:inherit;font-size:15px;padding:9px 10px;border:1px solid var(--line);border-radius:10px;background:var(--bg);color:var(--ink);resize:none}
+.nitem{padding:9px 0;border-bottom:1px solid var(--line)}
+.nitem a{color:var(--ink);text-decoration:none;font-weight:550;font-size:14.5px;line-height:1.4}
+.nitem .chip{margin-top:4px}
+.nchip{cursor:pointer;background:var(--card)}
+#newsAI a,.scen a{color:var(--accent);text-decoration:none}
 .empty{color:var(--muted);text-align:center;padding:20px 8px}
 .big{font-size:15px}
 </style>
@@ -129,6 +134,7 @@ details summary{cursor:pointer;color:var(--accent);font-size:14px;margin:8px 0}
 
   <nav class="tabs" id="tabs">
     <button data-t="ask" class="on">💬 Ask</button>
+    <button data-t="news">📰 News</button>
     <button data-t="sim">Simulate</button>
     <button data-t="strat">Strategies</button>
     <button data-t="best">Best today</button>
@@ -146,10 +152,19 @@ details summary{cursor:pointer;color:var(--accent);font-size:14px;margin:8px 0}
       <button>What could happen to TCS in the next month?</button>
       <button>Make a plan for ₹10,000 a day with ₹10 lakh</button>
       <button>What's the best buy/sell rule for HDFCBANK?</button>
+      <button>What news could move stocks today?</button>
       <button>Is Reliance risky right now?</button>
     </div>
     <div class="chatbar"><textarea id="chatIn" rows="2" placeholder="Type your question… e.g. Should I buy Infosys this week?"></textarea><button class="primary" id="chatSend">Send</button></div>
     <div id="chatNote" class="muted"></div>
+  </section>
+
+  <section class="tab card" id="tab-news">
+    <h2>What's moving the market</h2>
+    <p class="muted" style="margin-top:0" id="newsMeta">Headlines from Indian business news, refreshed every weekday morning (before 9:15 AM) and evening.</p>
+    <div id="newsAI"></div>
+    <div class="row" style="margin-top:10px"><label>Filter headlines<input type="search" id="newsQ" placeholder="Stock or word, e.g. RBI, crude, TCS"></label></div>
+    <div id="newsOut"></div>
   </section>
 
   <section class="tab card" id="tab-sim">
@@ -431,8 +446,8 @@ const TOOL_MSG={find_stocks:"Searching stocks",stock_snapshot:"Reading price his
 function chatSystem(){const m=(typeof AUTO!=="undefined"&&AUTO&&AUTO.meta)||{};
   return `You are the assistant inside "Stock Scenario Lab", a stock simulator for an Indian retail investor (NSE, rupees). Today is ${new Date().toLocaleDateString("en-IN",{dateStyle:"long"})}. Loaded: ${stocks.length} stocks${m.asof?`, daily prices up to ${m.asof}`:""}.
 Rules:
-- Use the tools for every number about a stock. Never invent prices or statistics. If the stock isn't loaded, say so and suggest uploading its NSE CSV.
-- You only know price history, not news, results or fundamentals beyond general knowledge (which may be out of date; say so if you use it).
+- Use the tools for every number about a stock. For news, events or 'why is X moving', call get_news (headlines are from the last ~36 hours). Never invent prices or statistics. If the stock isn't loaded, say so and suggest uploading its NSE CSV.
+- Beyond the get_news headlines you don't see news, results or fundamentals, only general knowledge (which may be out of date; say so if you use it).
 - Be honest: nothing can predict prices or a perfect buy/sell time, and daily profit targets are often unrealistic. Explain odds and risk in plain words, and suggest a stop-loss and position size.
 - This is education, not personal financial advice. Mention that briefly only when you recommend an action.
 - The user reads on a phone: answer in short paragraphs or a few bullets, with **bold** key numbers, under 200 words unless asked for detail. Use ₹ and Indian number formats (lakh, crore).`}
@@ -453,6 +468,66 @@ $("#chatSend").onclick=()=>chatSend($("#chatIn").value);
 $("#chatIn").addEventListener("keydown",e=>{if(e.key==="Enter"&&!e.shiftKey){e.preventDefault();chatSend($("#chatIn").value)}});
 $("#chatSugg").addEventListener("click",e=>{const b=e.target.closest("button");if(b)chatSend(b.textContent)});
 
+/* ---------- NEWS ---------- */
+let NEWS=[],NEWS_AI=null,newsFilter="";
+const ALIAS={RELIANCE:["Reliance Industries","RIL","Reliance Jio","Jio Platforms","Reliance Retail","Mukesh Ambani"],TCS:["TCS","Tata Consultancy"],INFY:["Infosys"],HDFCBANK:["HDFC Bank"],ICICIBANK:["ICICI Bank"],SBIN:["SBI","State Bank of India"],BHARTIARTL:["Airtel","Bharti Airtel"],LT:["L&T","Larsen"],"M&M":["M&M","Mahindra & Mahindra"],ITC:["ITC"],HINDUNILVR:["HUL","Hindustan Unilever"],KOTAKBANK:["Kotak Mahindra Bank","Kotak Bank"],AXISBANK:["Axis Bank"],BAJFINANCE:["Bajaj Finance"],BAJAJFINSV:["Bajaj Finserv"],"BAJAJ-AUTO":["Bajaj Auto"],MARUTI:["Maruti"],ETERNAL:["Eternal","Zomato","Blinkit"],SWIGGY:["Swiggy","Instamart"],ADANIENT:["Adani Enterprises"],ADANIPORTS:["Adani Ports"],ADANIGREEN:["Adani Green"],ADANIPOWER:["Adani Power"],ADANIENSOL:["Adani Energy"],TMPV:["Tata Motors","Jaguar Land Rover","JLR"],TMCV:["Tata Motors"],TATASTEEL:["Tata Steel"],TATAPOWER:["Tata Power"],TATACONSUM:["Tata Consumer"],HCLTECH:["HCLTech","HCL Tech"],TECHM:["Tech Mahindra"],SUNPHARMA:["Sun Pharma"],DRREDDY:["Dr Reddy","Dr. Reddy"],ULTRACEMCO:["UltraTech"],ASIANPAINT:["Asian Paints"],NTPC:["NTPC"],ONGC:["ONGC"],POWERGRID:["Power Grid"],COALINDIA:["Coal India"],HAL:["HAL","Hindustan Aeronautics"],BEL:["BEL","Bharat Electronics"],INDIGO:["IndiGo","InterGlobe"],DMART:["DMart","D-Mart","Avenue Supermarts"],LICI:["LIC"],JIOFIN:["Jio Financial"],SBILIFE:["SBI Life"],HDFCLIFE:["HDFC Life"],ICICIGI:["ICICI Lombard"],ICICIPRULI:["ICICI Prudential Life"],BPCL:["BPCL","Bharat Petroleum"],IOC:["IOC","Indian Oil"],GAIL:["GAIL"],HINDALCO:["Hindalco","Novelis"],JSWSTEEL:["JSW Steel"],JSWENERGY:["JSW Energy"],VEDL:["Vedanta"],HINDZINC:["Hindustan Zinc"],PFC:["PFC","Power Finance Corporation"],RECLTD:["REC Ltd","REC Limited"],IRFC:["IRFC"],PNB:["PNB","Punjab National Bank"],BANKBARODA:["Bank of Baroda"],CANBK:["Canara Bank"],DLF:["DLF"],LODHA:["Lodha","Macrotech"],NAUKRI:["Naukri","Info Edge"],TRENT:["Trent","Zudio","Westside"],HYUNDAI:["Hyundai Motor India"],TVSMOTOR:["TVS Motor"],EICHERMOT:["Eicher","Royal Enfield"],MAXHEALTH:["Max Healthcare"],APOLLOHOSP:["Apollo Hospitals"],SHRIRAMFIN:["Shriram Finance"],CHOLAFIN:["Cholamandalam"],UNITDSPR:["United Spirits"],VBL:["Varun Beverages"],ZYDUSLIFE:["Zydus"],TORNTPHARM:["Torrent Pharma"],DIVISLAB:["Divi's","Divis Lab"],LTIM:["LTIMindtree"],MOTHERSON:["Motherson"],GODREJCP:["Godrej Consumer"],PIDILITIND:["Pidilite"],AMBUJACEM:["Ambuja"],SHREECEM:["Shree Cement"],CGPOWER:["CG Power"],TATACAP:["Tata Capital"]};
+const STOPW=new Set(["bank","power","state","indian","india","life","general","national","union","steel","oil","coal","gas","hindustan","bharat","punjab","asian","united","shree","avenue","info","interglobe","tata","adani","bajaj","hdfc","icici","mahindra","jio","godrej","jsw","larsen","tech","max","sun","apollo","dr.","cg","the","solar","hero","dixon"]);
+let MATCHERS=null;
+function buildMatchers(){const first={};stocks.forEach(s=>{const w=(s.full||"").split(/\s+/)[0]?.toLowerCase();if(w)first[w]=(first[w]||0)+1});
+  MATCHERS=stocks.filter(s=>s.kind!=="manual").map(s=>{const al=new Set(ALIAS[s.name]||[]);const clean=(s.full||"").replace(/\b(Ltd\.?|Limited|Co\.|Corporation|Company)\s*$/i,"").replace(/\s+(Ltd\.?|Limited)\b.*$/i,"").trim();
+    if(clean.length>5)al.add(clean);const w=(s.full||"").split(/\s+/)[0]||"";if(w.length>=5&&first[w.toLowerCase()]===1&&!STOPW.has(w.toLowerCase()))al.add(w);if(s.name.length>=4&&/^[A-Z]+$/.test(s.name))al.add(s.name);
+    const parts=[...al].map(a=>{const e=a.replace(/[.*+?^${}()|[\]\\]/g,"\\$&");return /^[A-Z&\-]{2,5}$/.test(a)?{re:new RegExp("(?<![A-Za-z0-9])"+e+"(?![A-Za-z0-9])")}:{re:new RegExp("(?<![A-Za-z0-9])"+e+"(?![A-Za-z0-9])","i")}});
+    return{s,parts}})}
+function matchNews(t){if(!MATCHERS)buildMatchers();return MATCHERS.filter(m=>m.parts.some(p=>p.re.test(t))).map(m=>m.s.name)}
+const dayMove=s=>{const c=s&&s.closes;return c&&c.length>1?c.at(-1)/c.at(-2)-1:null};
+function ago(p){const m=Math.round((Date.now()/1000-p)/60);return m<60?m+" min ago":m<1440?Math.round(m/60)+" h ago":Math.round(m/1440)+" d ago"}
+const moveChip=sym=>{const s=byName(sym);const mv=dayMove(s);return`<button class="chip nchip" data-sym="${esc(sym)}">${esc(sym)}${mv==null?"":` <span class="${cls(mv)}">${pct(mv)}</span>`}</button>`};
+function initNews(){NEWS=((AUTO&&AUTO.news)||[]).map((n,i)=>({...n,id:i+1,m:matchNews(n.t)}));NEWS_AI=(AUTO&&AUTO.news_ai)||null;
+  if(!NEWS_AI){try{const c=JSON.parse(localStorage.getItem("newsAI")||"null");if(c&&c.key===newsKey())NEWS_AI=c.ai}catch(e){}}
+  renderNews()}
+const newsKey=()=>(AUTO&&AUTO.meta&&AUTO.meta.updated)||"";
+function renderNews(){const el=$("#newsOut");if(!NEWS.length){el.innerHTML="<div class='empty'>No headlines loaded yet. They arrive with the next automatic update.</div>";return}
+  const cnt={};NEWS.forEach(n=>n.m.forEach(s=>cnt[s]=(cnt[s]||0)+1));const hot=Object.entries(cnt).sort((a,b)=>b[1]-a[1]).slice(0,16);
+  const f=newsFilter.toLowerCase();const list=NEWS.filter(n=>!f||(f.startsWith("@")?n.m.includes(f.slice(1).toUpperCase()):n.t.toLowerCase().includes(f)||n.m.some(s=>s.toLowerCase()===f)));
+  $("#newsAI").innerHTML=aiHtml();
+  el.innerHTML=`<h3>Stocks in the news</h3><div>${hot.map(([s,c])=>moveChip(s).replace("</button>",` <span class="muted">·${c}</span></button>`)).join("")||"<span class='muted'>No Nifty 100 company named in today's headlines.</span>"}</div>
+   <h3>Headlines <span class="muted" style="font-weight:400">${list.length} of ${NEWS.length}${newsFilter?` · <a href="#" id="newsClear">clear filter</a>`:""}</span></h3>
+   <div class="nlist">${list.slice(0,120).map(n=>`<div class="nitem"><a href="${esc(n.u)}" target="_blank" rel="noopener">${esc(n.t)}</a><div class="muted">${esc(n.s)} · ${ago(n.p)}</div>${n.m.length?`<div>${n.m.map(moveChip).join("")}</div>`:""}</div>`).join("")}</div>
+   <p class="muted">Headlines link to the original publishers. Stock tags are matched by company name and can occasionally be wrong.</p>`;
+  const cl=$("#newsClear");if(cl)cl.onclick=e=>{e.preventDefault();newsFilter="";$("#newsQ").value="";renderNews()}}
+function aiHtml(){const A=NEWS_AI;const btn=`<button class="aibtn primary" id="newsAiBtn" style="display:${sampler?"":"none"}">${A?"Refresh analysis":"Analyse today's news with Claude"}</button>`;
+  if(!A)return`<p class="muted">Claude can read today's headlines and point out which stocks could move up or down, and why.</p>${btn}<div id="newsAiStatus" class="muted"></div>`;
+  const card=(x,dir)=>{const s=byName(x.symbol);const mv=dayMove(s);return`<div class="tile" style="border-left:4px solid var(${dir==="up"?"--up":"--down"})"><div class="k"><b style="color:var(--ink);font-size:14px">${esc(x.symbol)}</b> ${s&&s.full?esc(s.full):""} ${"●".repeat(Math.max(1,Math.min(3,x.strength||1)))}<span class="muted">${"○".repeat(3-Math.max(1,Math.min(3,x.strength||1)))}</span></div><div style="font-size:13.5px;margin:3px 0">${esc(x.why||"")}</div><div class="d">${s?`Last close ${px(s.price)}${mv==null?"":` · <span class="${cls(mv)}">${pct(mv)} on the day</span>`}`:""}${(x.headlines||[]).slice(0,2).map(id=>{const n=NEWS.find(z=>z.id===id);return n?`<br>↳ <a href="${esc(n.u)}" target="_blank" rel="noopener">${esc(n.t.slice(0,90))}${n.t.length>90?"…":""}</a>`:""}).join("")}</div></div>`};
+  return`<div class="tile" style="margin:8px 0"><div class="k">Market mood${A.generated?` · analysed ${esc(new Date(A.generated).toLocaleString("en-IN",{dateStyle:"medium",timeStyle:"short"}))}`:""}</div><div style="font-size:15px;font-weight:600;margin-top:2px">${esc(A.mood||"")}</div></div>
+   ${(A.themes||[]).length?`<h3>Big themes</h3>${A.themes.map(t=>`<div style="margin:6px 0"><b>${esc(t.title)}</b> <span style="color:var(--ink2)">${esc(t.detail||"")}</span></div>`).join("")}`:""}
+   <h3 class="up">Could go up</h3><div class="scen">${(A.up||[]).map(x=>card(x,"up")).join("")||"<span class='muted'>Nothing clearly positive.</span>"}</div>
+   <h3 class="down">Could go down</h3><div class="scen">${(A.down||[]).map(x=>card(x,"down")).join("")||"<span class='muted'>Nothing clearly negative.</span>"}</div>
+   <p class="muted">●●● = directly named in the news, ●○○ = indirect (sector or economy). ${esc(A.caution||"News is often priced in within minutes. Treat these as things to research, not buy or sell signals.")}</p>${btn}<div id="newsAiStatus" class="muted"></div>`}
+function newsPrompt(){const syms=stocks.filter(s=>s.kind!=="manual").map(s=>{const mv=dayMove(s);return`${s.name} (${s.full||""}${mv==null?"":", "+(mv*100).toFixed(1)+"% today"})`}).join("; ");
+  const heads=NEWS.slice(0,160).map(n=>`${n.id} | ${n.s} | ${ago(n.p)} | ${n.t}${n.m.length?" | tagged: "+n.m.join(","):""}`).join("\n");
+  return`You are a markets analyst for Indian retail investors. Below are recent news headlines (id | source | age | headline | stocks auto-tagged by name) and the NSE stocks available, with their latest daily move.
+Find events that could move specific listed stocks over the next few days: company news (results, orders, deals, management, regulatory action), sector news, government/RBI/SEBI policy, global factors (US Fed, crude oil, tariffs, rupee). Only use the headlines given; do not invent news. Prefer stocks from the list; when news is about a sector or the economy, name the most affected listed stocks and mark strength 1. Note when a stock already moved a lot (news may be priced in).
+Return JSON only, no prose, in this shape:
+{"mood":"one sentence on overall market mood","themes":[{"title":"3-6 words","detail":"one sentence"}],"up":[{"symbol":"NSE symbol from the list","why":"one plain-English sentence linking the news to the stock","strength":1,"headlines":[ids]}],"down":[same shape],"caution":"one sentence"}
+Limits: themes ≤4, up ≤8, down ≤8. strength: 3 = company directly named with clearly material news, 2 = directly named but moderate, 1 = indirect via sector/economy.
+
+STOCKS: ${syms}
+
+HEADLINES:
+${heads}`}
+async function runNewsAI(){if(!sampler)return;const b=$("#newsAiBtn"),st=$("#newsAiStatus");if(b)b.disabled=true;if(st)st.textContent="Claude is reading "+Math.min(160,NEWS.length)+" headlines…";
+  try{let v;const p=newsPrompt();if(sampler.json)v=await sampler.json(p,{modelTier:"default",cache:false});else{const r=await sampler(p,{modelTier:"default",cache:false});v=JSON.parse(r.text.replace(/^[^{]*/,"").replace(/[^}]*$/,""))}
+    const ok=new Set(stocks.map(s=>s.name));v.up=(v.up||[]).filter(x=>ok.has(x.symbol));v.down=(v.down||[]).filter(x=>ok.has(x.symbol));v.generated=new Date().toISOString();NEWS_AI=v;
+    try{localStorage.setItem("newsAI",JSON.stringify({key:newsKey(),ai:v}))}catch(e){}renderNews()}
+  catch(e){if(st)st.textContent=e&&e.code==="not_granted"?"Permission wasn't granted.":e&&e.code==="rate_limited"?"Too many requests. Try again in a minute.":"Couldn't analyse right now. Please try again.";if(b)b.disabled=false}}
+document.addEventListener("click",e=>{const c=e.target.closest(".nchip");if(c){newsFilter="@"+c.dataset.sym;$("#newsQ").value=c.dataset.sym;renderNews();$("#newsOut").scrollIntoView({behavior:"smooth"})}
+  if(e.target.id==="newsAiBtn")runNewsAI()});
+$("#newsQ").addEventListener("input",e=>{newsFilter=e.target.value.trim();renderNews()});
+TOOLS.push({name:"get_news",description:"Recent market headlines (last ~36h) from Indian business news, each tagged with the listed stocks it names, plus Claude's daily news view (stocks that could go up/down) if available. Optionally filter by stock symbol or keyword.",inputSchema:{type:"object",properties:{symbol:{type:"string"},keyword:{type:"string"}}},
+  execute:({symbol,keyword})=>{const s=symbol?findStock(symbol):null;const k=(keyword||"").toLowerCase();let L=NEWS;if(s)L=L.filter(n=>n.m.includes(s.name));if(k)L=L.filter(n=>n.t.toLowerCase().includes(k));
+    return{count:L.length,headlines:L.slice(0,30).map(n=>({headline:n.t,source:n.s,age:ago(n.p),stocks:n.m})),daily_view:NEWS_AI?{mood:NEWS_AI.mood,up:(NEWS_AI.up||[]).map(x=>x.symbol+": "+x.why),down:(NEWS_AI.down||[]).map(x=>x.symbol+": "+x.why)}:null}}});
+TOOL_MSG.get_news="Reading today's news";
+
 /* ---------- tabs ---------- */
 $("#tabs").addEventListener("click",e=>{const t=e.target.dataset.t;if(!t)return;document.querySelectorAll("#tabs button").forEach(b=>b.classList.toggle("on",b.dataset.t===t));document.querySelectorAll(".tab").forEach(x=>x.classList.toggle("on",x.id==="tab-"+t))});
 $("#simDrift").onchange=()=>$("#customWrap").style.display=$("#simDrift").value==="custom"?"flex":"none";
@@ -467,7 +542,7 @@ const grid=()=>({color:css("--line")});
 
 /* ---------- Claude explanations (optional) ---------- */
 let sampler=null;
-try{if(window.claude&&window.claude.use)window.claude.use("sample").then(s=>{sampler=s;document.querySelectorAll(".aibtn").forEach(b=>b.style.display="")}).catch(()=>{})}catch(e){}
+try{if(window.claude&&window.claude.use)window.claude.use("sample").then(s=>{sampler=s;document.querySelectorAll(".aibtn").forEach(b=>b.style.display="");try{if(NEWS.length)renderNews()}catch(e){}}).catch(()=>{})}catch(e){}
 function md(t){const lines=esc(t).replace(/\*\*(.+?)\*\*/g,"<b>$1</b>").split("\n");let h="",inUl=false;
   for(const L of lines){const l=L.trim();if(/^[-*•] /.test(l)){if(!inUl){h+="<ul>";inUl=true}h+="<li>"+l.slice(2)+"</li>";continue}if(inUl){h+="</ul>";inUl=false}
     if(/^#{1,4} /.test(l))h+="<h4>"+l.replace(/^#+ /,"")+"</h4>";else if(l)h+="<p style='margin:4px 0'>"+l+"</p>"}
@@ -753,6 +828,7 @@ if(AUTO&&AUTO.daily){
   $("#autoBox").innerHTML=`<div class="tile" style="margin:6px 0 10px"><div class="k">Live NSE data, loaded automatically</div><div class="v" style="font-size:16px">${stocks.length} stocks · prices up to ${esc(m.asof||"?")}</div><div class="d">Refreshed every weekday after market close${m.updated?" · last update "+esc(new Date(m.updated).toLocaleString("en-IN",{dateStyle:"medium",timeStyle:"short"})):""}${age>4?" · <span class='down'>looks stale: the daily update may have failed</span>":""}</div></div>`;
   $("#manualBox").open=false;$("#manualSum").style.display="";
   renderStocks();
+  try{initNews();if(AUTO.meta&&AUTO.meta.updated)$("#newsMeta").innerHTML+=" Last fetched "+esc(new Date(AUTO.meta.updated).toLocaleString("en-IN",{dateStyle:"medium",timeStyle:"short"}))+"."}catch(e){console.error(e)}
   setTimeout(()=>{$("#bestRun").click();if(ranking[0]){$("#simStock").value=ranking[0].s.name;$("#stStock").value=ranking[0].s.name}syncCombos();renderPick()},50);
 }else renderStocks();
 </script>
